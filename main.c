@@ -1,0 +1,390 @@
+#include <stdio.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <assert.h>
+#include <termios.h>
+#include <unistd.h>
+
+typedef struct {
+    // Both corner state and center state are stored in 2 bits, as there are only four possibilities
+    // for either in LSE.
+    uint8_t center_corner_state;
+
+    // Edges are stored as 4-bit sequences, with the 3 least significant bits representing the
+    // specific edge piece by index, and the most significant bit representing EO (zero representing
+    // an oriented edge, and one representing a misoriented edge). Since there are six edges, each of
+    // the six 4-bit sequences can be packed into three 8-bit integers.
+    uint8_t uf_ub_state;
+    uint8_t ul_ur_state;
+    uint8_t df_db_state;
+} lse_state_t;
+
+#define LSE_STATE_CORNER_STATE_MASK      0b00000011
+#define LSE_STATE_CORNER_STATE_INCREMENT 0b00000001
+
+#define LSE_STATE_CENTER_STATE_MASK      0b00110000
+#define LSE_STATE_CENTER_STATE_INCREMENT 0b00010000
+
+#define LSE_STATE_CORNER_CENTER_STATE_MASK (LSE_STATE_CORNER_STATE_MASK | LSE_STATE_CENTER_STATE_MASK)
+
+#define LSE_STATE_EDGE_ORIENTATION_MASK 0b1000
+#define LSE_STATE_EDGE_INDEX_MASK       0b0111
+#define LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK 0b10001000
+
+typedef enum : uint8_t {
+    LSE_STATE_EDGE_INDEX_UF = 0b0000,
+    LSE_STATE_EDGE_INDEX_UB = 0b0001,
+    LSE_STATE_EDGE_INDEX_UL = 0b0010,
+    LSE_STATE_EDGE_INDEX_UR = 0b0011,
+    LSE_STATE_EDGE_INDEX_DF = 0b0100,
+    LSE_STATE_EDGE_INDEX_DB = 0b0101
+} lse_state_edge_index_e;
+
+const lse_state_t SOLVED_LSE_STATE = {
+    .center_corner_state = 0,
+    .uf_ub_state = (LSE_STATE_EDGE_INDEX_UF << 4) | LSE_STATE_EDGE_INDEX_UB,
+    .ul_ur_state = (LSE_STATE_EDGE_INDEX_UL << 4) | LSE_STATE_EDGE_INDEX_UR,
+    .df_db_state = (LSE_STATE_EDGE_INDEX_DF << 4) | LSE_STATE_EDGE_INDEX_DB
+};
+
+lse_state_t lse_move_u(lse_state_t lse_state) {
+    uint8_t swap = lse_state.ul_ur_state;
+    lse_state.ul_ur_state = lse_state.uf_ub_state;
+    lse_state.uf_ub_state = (swap << 4) | (swap >> 4);
+
+    lse_state.center_corner_state += LSE_STATE_CORNER_STATE_INCREMENT;
+    lse_state.center_corner_state &= LSE_STATE_CORNER_CENTER_STATE_MASK;
+
+    return lse_state;
+}
+
+lse_state_t lse_move_u_prime(lse_state_t lse_state) {
+    uint8_t swap = lse_state.uf_ub_state;
+    lse_state.uf_ub_state = lse_state.ul_ur_state;
+    lse_state.ul_ur_state = (swap << 4) | (swap >> 4);
+
+    lse_state.center_corner_state += 3 * LSE_STATE_CORNER_STATE_INCREMENT;
+    lse_state.center_corner_state &= LSE_STATE_CORNER_CENTER_STATE_MASK;
+
+    return lse_state;
+}
+
+lse_state_t lse_move_u2(lse_state_t lse_state) {
+    lse_state.uf_ub_state = (lse_state.uf_ub_state << 4) | (lse_state.uf_ub_state >> 4);
+    lse_state.ul_ur_state = (lse_state.ul_ur_state << 4) | (lse_state.ul_ur_state >> 4);
+
+    lse_state.center_corner_state += 2 * LSE_STATE_CORNER_STATE_INCREMENT;
+    lse_state.center_corner_state &= LSE_STATE_CORNER_CENTER_STATE_MASK;
+
+    return lse_state;
+}
+
+lse_state_t lse_move_m(lse_state_t lse_state) {
+    uint8_t prev_uf_ub_state = lse_state.uf_ub_state;
+    uint8_t prev_df_db_state = lse_state.df_db_state;
+    lse_state.uf_ub_state = ((prev_uf_ub_state << 4) | (prev_df_db_state & 0b00001111)) ^ LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK;
+    lse_state.df_db_state = ((prev_df_db_state >> 4) | (prev_uf_ub_state & 0b11110000)) ^ LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK;
+
+    lse_state.center_corner_state += LSE_STATE_CENTER_STATE_INCREMENT;
+    lse_state.center_corner_state &= LSE_STATE_CORNER_CENTER_STATE_MASK;
+
+    return lse_state;
+}
+
+lse_state_t lse_move_m_prime(lse_state_t lse_state) {
+    uint8_t prev_uf_ub_state = lse_state.uf_ub_state;
+    uint8_t prev_df_db_state = lse_state.df_db_state;
+    lse_state.uf_ub_state = ((prev_uf_ub_state >> 4) | (prev_df_db_state & 0b11110000)) ^ LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK;
+    lse_state.df_db_state = ((prev_df_db_state << 4) | (prev_uf_ub_state & 0b00001111)) ^ LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK;
+
+    lse_state.center_corner_state += 3 * LSE_STATE_CENTER_STATE_INCREMENT;
+    lse_state.center_corner_state &= LSE_STATE_CORNER_CENTER_STATE_MASK;
+
+    return lse_state;
+}
+
+lse_state_t lse_move_m2(lse_state_t lse_state) {
+    uint8_t swap = lse_state.uf_ub_state;
+    lse_state.uf_ub_state = (lse_state.df_db_state << 4) | (lse_state.df_db_state >> 4);
+    lse_state.df_db_state = (swap << 4) | (swap >> 4);
+
+    lse_state.center_corner_state += 2 * LSE_STATE_CENTER_STATE_INCREMENT;
+    lse_state.center_corner_state &= LSE_STATE_CORNER_CENTER_STATE_MASK;
+
+    return lse_state;
+}
+
+typedef enum : uint8_t {
+    FACE_INDEX_U,
+    FACE_INDEX_D,
+    FACE_INDEX_F,
+    FACE_INDEX_B,
+    FACE_INDEX_R,
+    FACE_INDEX_L
+} face_index_e;
+
+face_index_e lse_state_get_edge_face(int edge_state, bool is_misoriented) {
+    bool should_return_oriented = (bool)(edge_state & LSE_STATE_EDGE_ORIENTATION_MASK) == is_misoriented;
+    switch (edge_state & LSE_STATE_EDGE_INDEX_MASK) {
+        case LSE_STATE_EDGE_INDEX_UF:
+            return should_return_oriented ? FACE_INDEX_U : FACE_INDEX_F;
+        case LSE_STATE_EDGE_INDEX_UB:
+            return should_return_oriented ? FACE_INDEX_U : FACE_INDEX_B;
+        case LSE_STATE_EDGE_INDEX_UL:
+            return should_return_oriented ? FACE_INDEX_U : FACE_INDEX_L;
+        case LSE_STATE_EDGE_INDEX_UR:
+            return should_return_oriented ? FACE_INDEX_U : FACE_INDEX_R;
+        case LSE_STATE_EDGE_INDEX_DF:
+            return should_return_oriented ? FACE_INDEX_D : FACE_INDEX_F;
+        case LSE_STATE_EDGE_INDEX_DB:
+            return should_return_oriented ? FACE_INDEX_D : FACE_INDEX_B;
+    }
+    assert(false);
+}
+
+face_index_e lse_state_get_center_face(int center_state, int target_center) {
+    switch ((center_state + target_center) & 0b11) {
+        case 0: return FACE_INDEX_U;
+        case 1: return FACE_INDEX_B;
+        case 2: return FACE_INDEX_D;
+        case 3: return FACE_INDEX_F;
+    }
+    assert(false);
+}
+
+face_index_e lse_state_get_corner_front_face(int corner_state, int target_corner) {
+    switch ((corner_state + target_corner) & 0b11) {
+        case 0: return FACE_INDEX_F;
+        case 1: return FACE_INDEX_R;
+        case 2: return FACE_INDEX_B;
+        case 3: return FACE_INDEX_L;
+    }
+    assert(false);
+}
+
+typedef struct {
+    face_index_e stickers[6][9];
+} visual_cube_state_t;
+
+typedef enum {
+    VISUAL_CUBE_EDGE_UB = (1 << FACE_INDEX_U) | (1 << FACE_INDEX_B),
+    VISUAL_CUBE_EDGE_UR = (1 << FACE_INDEX_U) | (1 << FACE_INDEX_R),
+    VISUAL_CUBE_EDGE_UF = (1 << FACE_INDEX_U) | (1 << FACE_INDEX_F),
+    VISUAL_CUBE_EDGE_UL = (1 << FACE_INDEX_U) | (1 << FACE_INDEX_L),
+    VISUAL_CUBE_EDGE_BL = (1 << FACE_INDEX_B) | (1 << FACE_INDEX_L),
+    VISUAL_CUBE_EDGE_FL = (1 << FACE_INDEX_F) | (1 << FACE_INDEX_L),
+    VISUAL_CUBE_EDGE_FR = (1 << FACE_INDEX_F) | (1 << FACE_INDEX_R),
+    VISUAL_CUBE_EDGE_BR = (1 << FACE_INDEX_B) | (1 << FACE_INDEX_R),
+    VISUAL_CUBE_EDGE_DF = (1 << FACE_INDEX_D) | (1 << FACE_INDEX_F),
+    VISUAL_CUBE_EDGE_DR = (1 << FACE_INDEX_D) | (1 << FACE_INDEX_R),
+    VISUAL_CUBE_EDGE_DB = (1 << FACE_INDEX_D) | (1 << FACE_INDEX_B),
+    VISUAL_CUBE_EDGE_DL = (1 << FACE_INDEX_D) | (1 << FACE_INDEX_L)
+} visual_cube_edge_e;
+
+typedef enum {
+    VISUAL_CUBE_CORNER_UBL = (1 << FACE_INDEX_U) | (1 << FACE_INDEX_B) | (1 << FACE_INDEX_L),
+    VISUAL_CUBE_CORNER_UBR = (1 << FACE_INDEX_U) | (1 << FACE_INDEX_B) | (1 << FACE_INDEX_R),
+    VISUAL_CUBE_CORNER_UFR = (1 << FACE_INDEX_U) | (1 << FACE_INDEX_F) | (1 << FACE_INDEX_R),
+    VISUAL_CUBE_CORNER_UFL = (1 << FACE_INDEX_U) | (1 << FACE_INDEX_F) | (1 << FACE_INDEX_L),
+    VISUAL_CUBE_CORNER_DFL = (1 << FACE_INDEX_D) | (1 << FACE_INDEX_F) | (1 << FACE_INDEX_L),
+    VISUAL_CUBE_CORNER_DFR = (1 << FACE_INDEX_D) | (1 << FACE_INDEX_F) | (1 << FACE_INDEX_R),
+    VISUAL_CUBE_CORNER_DBR = (1 << FACE_INDEX_D) | (1 << FACE_INDEX_B) | (1 << FACE_INDEX_R),
+    VISUAL_CUBE_CORNER_DBL = (1 << FACE_INDEX_D) | (1 << FACE_INDEX_B) | (1 << FACE_INDEX_L)
+} visual_cube_corner_e;
+
+void visual_cube_state_reset(visual_cube_state_t* visual_cube_state) {
+    for (int face = 0; face < 6; face++) {
+        for (int i = 0; i < 9; i++) {
+            visual_cube_state->stickers[face][i] = (face_index_e)face;
+        }
+    }
+}
+
+int visual_cube_get_edge_sticker_index(face_index_e primary_face_index, face_index_e secondary_face_index) {
+    static int index_lookup_table[6][6] = {
+        [FACE_INDEX_U] = { [FACE_INDEX_B] = 1, [FACE_INDEX_R] = 5, [FACE_INDEX_F] = 7, [FACE_INDEX_L] = 3 },
+        [FACE_INDEX_D] = { [FACE_INDEX_F] = 1, [FACE_INDEX_R] = 5, [FACE_INDEX_B] = 7, [FACE_INDEX_D] = 3 },
+        [FACE_INDEX_F] = { [FACE_INDEX_U] = 1, [FACE_INDEX_R] = 5, [FACE_INDEX_D] = 7, [FACE_INDEX_L] = 3 },
+        [FACE_INDEX_B] = { [FACE_INDEX_U] = 1, [FACE_INDEX_L] = 5, [FACE_INDEX_D] = 7, [FACE_INDEX_R] = 3 },
+        [FACE_INDEX_R] = { [FACE_INDEX_U] = 1, [FACE_INDEX_B] = 5, [FACE_INDEX_D] = 7, [FACE_INDEX_F] = 3 },
+        [FACE_INDEX_L] = { [FACE_INDEX_U] = 1, [FACE_INDEX_F] = 5, [FACE_INDEX_D] = 7, [FACE_INDEX_B] = 3 }
+    };
+    return index_lookup_table[primary_face_index][secondary_face_index];
+}
+
+int visual_cube_get_corner_sticker_index(visual_cube_corner_e corner, face_index_e primary_face_index) {
+    switch (corner) {
+        case VISUAL_CUBE_CORNER_UBL: return primary_face_index == FACE_INDEX_B ? 2 : 0;
+        case VISUAL_CUBE_CORNER_UBR: return primary_face_index == FACE_INDEX_B ? 0 : 2;
+        case VISUAL_CUBE_CORNER_UFR: return primary_face_index == FACE_INDEX_U ? 8 : (primary_face_index == FACE_INDEX_F ? 2 : 0);
+        case VISUAL_CUBE_CORNER_UFL: return primary_face_index == FACE_INDEX_U ? 6 : (primary_face_index == FACE_INDEX_F ? 0 : 2);
+        case VISUAL_CUBE_CORNER_DFL: return primary_face_index == FACE_INDEX_D ? 0 : (primary_face_index == FACE_INDEX_F ? 6 : 8);
+        case VISUAL_CUBE_CORNER_DFR: return primary_face_index == FACE_INDEX_D ? 2 : (primary_face_index == FACE_INDEX_F ? 8 : 6);
+        case VISUAL_CUBE_CORNER_DBR: return primary_face_index == FACE_INDEX_B ? 6 : 8;
+        case VISUAL_CUBE_CORNER_DBL: return primary_face_index == FACE_INDEX_B ? 8 : 6;
+    }
+    assert(false);
+}
+
+void visual_cube_state_write_lse_state_edge(visual_cube_state_t* visual_cube_state, visual_cube_edge_e edge, int state) {
+    face_index_e primary_face_index   = __builtin_ctz(edge);
+    face_index_e secondary_face_index = __builtin_ctz(edge ^ (1 << primary_face_index));
+
+    int primary_sticker_index   = visual_cube_get_edge_sticker_index(primary_face_index, secondary_face_index);
+    int secondary_sticker_index = visual_cube_get_edge_sticker_index(secondary_face_index, primary_face_index);
+
+    visual_cube_state->stickers[ primary_face_index ][ primary_sticker_index ] = lse_state_get_edge_face(state, false);
+    visual_cube_state->stickers[secondary_face_index][secondary_sticker_index] = lse_state_get_edge_face(state, true);
+}
+
+void visual_cube_state_write_center(visual_cube_state_t* visual_cube_state, face_index_e center, face_index_e state) {
+    visual_cube_state->stickers[center][4] = state;
+}
+
+void visual_cube_state_write_corner(visual_cube_state_t* visual_cube_state, visual_cube_corner_e corner,
+                                    face_index_e primary_sticker, face_index_e secondary_sticker, face_index_e tertiary_sticker) {
+    face_index_e primary_face_index   = __builtin_ctz(corner);
+    face_index_e secondary_face_index = __builtin_ctz(corner ^ (1 << primary_face_index));
+    face_index_e tertiary_face_index  = __builtin_ctz(corner ^ (1 << primary_face_index) ^ (1 << secondary_face_index));
+
+    int primary_sticker_index   = visual_cube_get_corner_sticker_index(corner, primary_face_index);
+    int secondary_sticker_index = visual_cube_get_corner_sticker_index(corner, secondary_face_index);
+    int tertiary_sticker_index  = visual_cube_get_corner_sticker_index(corner, tertiary_face_index);
+
+    visual_cube_state->stickers[ primary_face_index ][ primary_sticker_index ] = primary_sticker;
+    visual_cube_state->stickers[secondary_face_index][secondary_sticker_index] = secondary_sticker;
+    visual_cube_state->stickers[tertiary_face_index ][tertiary_sticker_index ] = tertiary_sticker;
+}
+
+void lse_state_write_visual_cube_state(lse_state_t lse_state, visual_cube_state_t* visual_cube_state) {
+    visual_cube_state_reset(visual_cube_state);
+
+    visual_cube_state_write_lse_state_edge(visual_cube_state, VISUAL_CUBE_EDGE_UF, lse_state.uf_ub_state >> 4);
+    visual_cube_state_write_lse_state_edge(visual_cube_state, VISUAL_CUBE_EDGE_UB, lse_state.uf_ub_state & 0b1111);
+    visual_cube_state_write_lse_state_edge(visual_cube_state, VISUAL_CUBE_EDGE_UL, lse_state.ul_ur_state >> 4);
+    visual_cube_state_write_lse_state_edge(visual_cube_state, VISUAL_CUBE_EDGE_UR, lse_state.ul_ur_state & 0b1111);
+    visual_cube_state_write_lse_state_edge(visual_cube_state, VISUAL_CUBE_EDGE_DF, lse_state.df_db_state >> 4);
+    visual_cube_state_write_lse_state_edge(visual_cube_state, VISUAL_CUBE_EDGE_DB, lse_state.df_db_state & 0b1111);
+
+    int center_state = (lse_state.center_corner_state & LSE_STATE_CENTER_STATE_MASK) >> 4;
+    visual_cube_state_write_center(visual_cube_state, FACE_INDEX_U, lse_state_get_center_face(center_state, 0));
+    visual_cube_state_write_center(visual_cube_state, FACE_INDEX_B, lse_state_get_center_face(center_state, 1));
+    visual_cube_state_write_center(visual_cube_state, FACE_INDEX_D, lse_state_get_center_face(center_state, 2));
+    visual_cube_state_write_center(visual_cube_state, FACE_INDEX_F, lse_state_get_center_face(center_state, 3));
+
+    int corner_state = lse_state.center_corner_state & LSE_STATE_CORNER_STATE_MASK;
+    face_index_e face_index_f = lse_state_get_corner_front_face(corner_state, 0);
+    face_index_e face_index_r = lse_state_get_corner_front_face(corner_state, 1);
+    face_index_e face_index_b = lse_state_get_corner_front_face(corner_state, 2);
+    face_index_e face_index_l = lse_state_get_corner_front_face(corner_state, 3);
+    visual_cube_state_write_corner(visual_cube_state, VISUAL_CUBE_CORNER_UBL, FACE_INDEX_U, face_index_b, face_index_l);
+    visual_cube_state_write_corner(visual_cube_state, VISUAL_CUBE_CORNER_UBR, FACE_INDEX_U, face_index_b, face_index_r);
+    visual_cube_state_write_corner(visual_cube_state, VISUAL_CUBE_CORNER_UFR, FACE_INDEX_U, face_index_f, face_index_r);
+    visual_cube_state_write_corner(visual_cube_state, VISUAL_CUBE_CORNER_UFL, FACE_INDEX_U, face_index_f, face_index_l);
+}
+
+#define ESC_ERASE_ENTIRE_SCREEN "\x1b[2J"
+#define ESC_MOVE_CURSOR_HOME    "\x1b[H"
+
+#define ESC_COLOR_WHITE  "\x1b[47m"
+#define ESC_COLOR_ORANGE "\x1b[48;5;208m"
+#define ESC_COLOR_GREEN  "\x1b[42m"
+#define ESC_COLOR_RED    "\x1b[41m"
+#define ESC_COLOR_BLUE   "\x1b[48;5;27m"
+#define ESC_COLOR_YELLOW "\x1b[48;5;190m"
+
+#define ESC_COLOR_RESET "\x1b[0m"
+
+void enter_raw_mode() {
+    struct termios raw;
+    tcgetattr(STDIN_FILENO, &raw);
+    raw.c_lflag &= ~(ECHO | ICANON);
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+}
+
+void reset_screen() {
+    printf(ESC_ERASE_ENTIRE_SCREEN ESC_MOVE_CURSOR_HOME);
+}
+
+void draw_face_color(face_index_e face_index) {
+    switch (face_index) {
+        case FACE_INDEX_U: printf(ESC_COLOR_WHITE  "  " ESC_COLOR_RESET); return;
+        case FACE_INDEX_L: printf(ESC_COLOR_ORANGE "  " ESC_COLOR_RESET); return;
+        case FACE_INDEX_F: printf(ESC_COLOR_GREEN  "  " ESC_COLOR_RESET); return;
+        case FACE_INDEX_R: printf(ESC_COLOR_RED    "  " ESC_COLOR_RESET); return;
+        case FACE_INDEX_B: printf(ESC_COLOR_BLUE   "  " ESC_COLOR_RESET); return;
+        case FACE_INDEX_D: printf(ESC_COLOR_YELLOW "  " ESC_COLOR_RESET); return;
+    }
+    assert(false);
+}
+
+void draw_visual_cube_state(const visual_cube_state_t* visual_cube_state) {
+    for (int y = 0; y < 3; y++) {
+        printf("        ");
+        for (int x = 0; x < 3; x++) {
+            draw_face_color(visual_cube_state->stickers[FACE_INDEX_U][y * 3 + x]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+    for (int y = 0; y < 3; y++) {
+        for (int x = 0; x < 3; x++) {
+            draw_face_color(visual_cube_state->stickers[FACE_INDEX_L][y * 3 + x]);
+        }
+        printf("  ");
+        for (int x = 0; x < 3; x++) {
+            draw_face_color(visual_cube_state->stickers[FACE_INDEX_F][y * 3 + x]);
+        }
+        printf("  ");
+        for (int x = 0; x < 3; x++) {
+            draw_face_color(visual_cube_state->stickers[FACE_INDEX_R][y * 3 + x]);
+        }
+        printf("  ");
+        for (int x = 0; x < 3; x++) {
+            draw_face_color(visual_cube_state->stickers[FACE_INDEX_B][y * 3 + x]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+    for (int y = 0; y < 3; y++) {
+        printf("        ");
+        for (int x = 0; x < 3; x++) {
+            draw_face_color(visual_cube_state->stickers[FACE_INDEX_D][y * 3 + x]);
+        }
+        printf("\n");
+    }
+}
+
+void draw_lse_state(lse_state_t lse_state) {
+    visual_cube_state_t visual_cube_state;
+    visual_cube_state_reset(&visual_cube_state);
+
+    lse_state_write_visual_cube_state(lse_state, &visual_cube_state);
+
+    draw_visual_cube_state(&visual_cube_state);
+}
+
+int main() {
+    lse_state_t lse_state = SOLVED_LSE_STATE;
+
+    enter_raw_mode();
+    while (true) {
+        reset_screen();
+        draw_lse_state(lse_state);
+
+        handle_input:
+        switch (getchar()) {
+            case 'm': lse_state = lse_move_m(lse_state); continue;
+            case 'k': lse_state = lse_move_m_prime(lse_state); continue;
+            case 's': lse_state = lse_move_u(lse_state); continue;
+            case 'd': lse_state = lse_move_u_prime(lse_state); continue;
+            case 'q': break;
+            default: goto handle_input;
+        }
+
+        reset_screen();
+        break;
+    }
+
+    return 0;
+}
