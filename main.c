@@ -4,6 +4,10 @@
 #include <assert.h>
 #include <termios.h>
 #include <unistd.h>
+#include <string.h>
+#include <ctype.h>
+#include <time.h>
+#include <stdlib.h>
 
 typedef struct {
     // Both corner state and center state are stored in 2 bits, as there are only four possibilities
@@ -110,6 +114,52 @@ lse_state_t lse_move_m2(lse_state_t lse_state) {
 
     lse_state.center_corner_state += 2 * LSE_STATE_CENTER_STATE_INCREMENT;
     lse_state.center_corner_state &= LSE_STATE_CORNER_CENTER_STATE_MASK;
+
+    return lse_state;
+}
+
+lse_state_t generate_random_lse_state() {
+    lse_state_t lse_state;
+    lse_state.center_corner_state = rand() & LSE_STATE_CORNER_CENTER_STATE_MASK;
+
+    bool odd_center_state = (bool)(lse_state.center_corner_state & LSE_STATE_CENTER_STATE_INCREMENT);
+    bool odd_corner_state = (bool)(lse_state.center_corner_state & LSE_STATE_CORNER_STATE_INCREMENT);
+    bool is_even_parity = odd_center_state == odd_corner_state;
+
+    lse_state_edge_index_e edge_indices[6] = {
+        LSE_STATE_EDGE_INDEX_UF, LSE_STATE_EDGE_INDEX_UB, LSE_STATE_EDGE_INDEX_UL,
+        LSE_STATE_EDGE_INDEX_UR, LSE_STATE_EDGE_INDEX_DF, LSE_STATE_EDGE_INDEX_DB
+    };
+    for (int i = 0; i < 5; i++) {
+        int swap_index;
+        if (i < 4) {
+            swap_index = i + rand() % (6 - i);
+        } else {
+            swap_index = is_even_parity ? 4 : 5;
+        }
+
+        lse_state_edge_index_e swap = edge_indices[i];
+        edge_indices[i] = edge_indices[swap_index];
+        edge_indices[swap_index] = swap;
+        is_even_parity ^= (swap_index != i);
+    }
+    assert(is_even_parity);
+
+    lse_state.uf_ub_state = (edge_indices[LSE_STATE_EDGE_INDEX_UF] << 4) | edge_indices[LSE_STATE_EDGE_INDEX_UB];
+    lse_state.ul_ur_state = (edge_indices[LSE_STATE_EDGE_INDEX_UL] << 4) | edge_indices[LSE_STATE_EDGE_INDEX_UR];
+    lse_state.df_db_state = (edge_indices[LSE_STATE_EDGE_INDEX_DF] << 4) | edge_indices[LSE_STATE_EDGE_INDEX_DB];
+
+    int edge_orientation = rand();
+    lse_state.uf_ub_state ^= (edge_orientation << 0) & LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK;
+    lse_state.ul_ur_state ^= (edge_orientation << 1) & LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK;
+    lse_state.df_db_state ^= (edge_orientation << 2) & LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK;
+
+    bool has_illegal_eo = __builtin_popcount(
+        (lse_state.uf_ub_state ^ lse_state.ul_ur_state ^ lse_state.df_db_state) & LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK
+    ) == 1;
+    if (has_illegal_eo) {
+        lse_state.df_db_state ^= LSE_STATE_EDGE_ORIENTATION_MASK;
+    }
 
     return lse_state;
 }
@@ -295,11 +345,24 @@ void lse_state_write_visual_cube_state(lse_state_t lse_state, visual_cube_state_
 
 #define ESC_COLOR_RESET "\x1b[0m"
 
+static struct termios initial_termios_state;
+static bool is_initial_termios_state_initialized = false;
 void enter_raw_mode() {
     struct termios raw;
     tcgetattr(STDIN_FILENO, &raw);
+    if (!is_initial_termios_state_initialized) {
+        initial_termios_state = raw;
+        is_initial_termios_state_initialized = true;
+    }
+
     raw.c_lflag &= ~(ECHO | ICANON);
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+}
+
+void restore_initial_mode() {
+    if (is_initial_termios_state_initialized) {
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &initial_termios_state);
+    }
 }
 
 void reset_screen() {
@@ -364,7 +427,33 @@ void draw_lse_state(lse_state_t lse_state) {
     draw_visual_cube_state(&visual_cube_state);
 }
 
+void clear_trailing_whitespace(char* str) {
+    for (int i = 0; str[i] != '\0'; i++) {
+        if (isspace(str[i])) {
+            str[i] = '\0';
+            return;
+        }
+    }
+}
+
+void read_and_execute_command(lse_state_t* lse_state) {
+    restore_initial_mode();
+
+    char command[16] = {};
+    if (fgets(command, sizeof command, stdin) != NULL) {
+        clear_trailing_whitespace(command);
+
+        if (strcmp(command, "scramble") == 0) {
+            *lse_state = generate_random_lse_state();
+        }
+    }
+
+    enter_raw_mode();
+}
+
 int main() {
+    srand(time(NULL));
+
     lse_state_t lse_state = SOLVED_LSE_STATE;
 
     enter_raw_mode();
@@ -378,6 +467,10 @@ int main() {
             case 'k': lse_state = lse_move_m_prime(lse_state); continue;
             case 's': lse_state = lse_move_u(lse_state); continue;
             case 'd': lse_state = lse_move_u_prime(lse_state); continue;
+            case '/':
+                printf("/");
+                read_and_execute_command(&lse_state);
+                continue;
             case 'q': break;
             default: goto handle_input;
         }
