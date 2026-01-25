@@ -9,6 +9,19 @@
 #include <time.h>
 #include <stdlib.h>
 
+#define array_append(array, element) \
+    do { \
+        if ((array).size >= (array).capacity) { \
+            if ((array).capacity == 0) { \
+                (array).capacity = 8; \
+            } else { \
+                (array).capacity *= 2; \
+            } \
+            (array).data = realloc((array).data, (array).capacity * sizeof *(array).data); \
+        } \
+        (array).data[(array).size++] = (element); \
+    } while (false)
+
 typedef struct {
     // Both corner state and center state are stored in 2 bits, as there are only four possibilities
     // for either in LSE.
@@ -162,6 +175,40 @@ lse_state_t generate_random_lse_state() {
     }
 
     return lse_state;
+}
+
+typedef enum : uint8_t {
+    LSE_MOVE_U       = 0b001,
+    LSE_MOVE_U2      = 0b010,
+    LSE_MOVE_U_PRIME = 0b011,
+    LSE_MOVE_M       = 0b101,
+    LSE_MOVE_M2      = 0b110,
+    LSE_MOVE_M_PRIME = 0b111
+} lse_move_e;
+
+#define LSE_MOVE_TYPE_MASK  0b100
+#define LSE_MOVE_COUNT_MASK 0b011
+
+typedef struct {
+    lse_move_e* data;
+    size_t size;
+    size_t capacity;
+} lse_move_list_t;
+
+void lse_move_list_simplify_append(lse_move_list_t* list, lse_move_e move) {
+    if (list->size > 0) {
+        lse_move_e* prev_move = &list->data[list->size - 1];
+        if ((*prev_move & LSE_MOVE_TYPE_MASK) == (move & LSE_MOVE_TYPE_MASK)) {
+            int move_count = (*prev_move + move) & LSE_MOVE_COUNT_MASK;
+            if (move_count == 0) {
+                list->size--;
+            } else {
+                *prev_move = (move & LSE_MOVE_TYPE_MASK) | move_count;
+            }
+            return;
+        }
+    }
+    array_append(*list, move);
 }
 
 typedef enum : uint8_t {
@@ -436,7 +483,45 @@ void clear_trailing_whitespace(char* str) {
     }
 }
 
-void read_and_execute_command(lse_state_t* lse_state) {
+typedef struct {
+    lse_state_t* data;
+    size_t size;
+    size_t capacity;
+} lse_state_list_t;
+
+static lse_state_list_t prev_lse_states = {};
+
+void execute_command_scramble(lse_state_t* lse_state, lse_move_list_t* lse_move_list) {
+    *lse_state = generate_random_lse_state();
+    array_append(prev_lse_states, *lse_state);
+
+    lse_move_list->size = 0;
+}
+
+void execute_command_curr_scramble(lse_state_t* lse_state, lse_move_list_t* lse_move_list)
+{
+    if (prev_lse_states.size >= 1) {
+        *lse_state = prev_lse_states.data[prev_lse_states.size - 1];
+    } else {
+        *lse_state = SOLVED_LSE_STATE;
+    }
+
+    lse_move_list->size = 0;
+}
+
+void execute_command_prev_scramble(lse_state_t* lse_state, lse_move_list_t* lse_move_list) {
+    if (prev_lse_states.size >= 2) {
+        *lse_state = prev_lse_states.data[prev_lse_states.size - 2];
+        prev_lse_states.size--;
+    } else {
+        prev_lse_states.size = 0;
+        *lse_state = SOLVED_LSE_STATE;
+    }
+
+    lse_move_list->size = 0;
+}
+
+void read_and_execute_command(lse_state_t* lse_state, lse_move_list_t* lse_move_list) {
     restore_initial_mode();
 
     char command[16] = {};
@@ -444,7 +529,13 @@ void read_and_execute_command(lse_state_t* lse_state) {
         clear_trailing_whitespace(command);
 
         if (strcmp(command, "scramble") == 0) {
-            *lse_state = generate_random_lse_state();
+            execute_command_scramble(lse_state, lse_move_list);
+        }
+        if (strcmp(command, "prev") == 0) {
+            execute_command_prev_scramble(lse_state, lse_move_list);
+        }
+        if (strcmp(command, "curr") == 0) {
+            execute_command_curr_scramble(lse_state, lse_move_list);
         }
     }
 
@@ -455,21 +546,59 @@ int main() {
     srand(time(NULL));
 
     lse_state_t lse_state = SOLVED_LSE_STATE;
+    lse_move_list_t lse_move_list = {};
 
     enter_raw_mode();
     while (true) {
         reset_screen();
         draw_lse_state(lse_state);
+        for (int i = 0; i < lse_move_list.size; i++) {
+            if (i != 0) {
+                printf(" ");
+            }
+            switch (lse_move_list.data[i]) {
+                case LSE_MOVE_U:       printf("U");  break;
+                case LSE_MOVE_U_PRIME: printf("U'"); break;
+                case LSE_MOVE_U2:      printf("U2"); break;
+                case LSE_MOVE_M:       printf("M");  break;
+                case LSE_MOVE_M_PRIME: printf("M'"); break;
+                case LSE_MOVE_M2:      printf("M2"); break;
+            }
+        }
+        printf("\n(%zu STM)\n", lse_move_list.size);
 
+        char c;
         handle_input:
-        switch (getchar()) {
-            case 'm': lse_state = lse_move_m(lse_state); continue;
-            case 'k': lse_state = lse_move_m_prime(lse_state); continue;
-            case 's': lse_state = lse_move_u(lse_state); continue;
-            case 'd': lse_state = lse_move_u_prime(lse_state); continue;
+        c = getchar();
+        switch (c) {
+            case 'm':
+                lse_state = lse_move_m(lse_state);
+                lse_move_list_simplify_append(&lse_move_list, LSE_MOVE_M);
+                continue;
+            case 'k':
+                lse_state = lse_move_m_prime(lse_state);
+                lse_move_list_simplify_append(&lse_move_list, LSE_MOVE_M_PRIME);
+                continue;
+            case 's':
+                lse_state = lse_move_u(lse_state);
+                lse_move_list_simplify_append(&lse_move_list, LSE_MOVE_U);
+                continue;
+            case 'd':
+                lse_state = lse_move_u_prime(lse_state);
+                lse_move_list_simplify_append(&lse_move_list, LSE_MOVE_U_PRIME);
+                continue;
             case '/':
                 printf("/");
-                read_and_execute_command(&lse_state);
+                read_and_execute_command(&lse_state, &lse_move_list);
+                continue;
+            case '\n':
+                execute_command_scramble(&lse_state, &lse_move_list);
+                continue;
+            case ' ':
+                execute_command_curr_scramble(&lse_state, &lse_move_list);
+                continue;
+            case 'p':
+                execute_command_prev_scramble(&lse_state, &lse_move_list);
                 continue;
             case 'q': break;
             default: goto handle_input;
