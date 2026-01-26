@@ -22,6 +22,34 @@
         (array).data[(array).size++] = (element); \
     } while (false)
 
+#define array_copy(src_array, copy_array) \
+    do { \
+        (copy_array).data = malloc((src_array).size); \
+        (copy_array).size = (src_array).size; \
+        (copy_array).capacity = (src_array).capacity; \
+        memcpy((copy_array).data, (src_array).data, (src_array).size * sizeof *(copy_array).data); \
+    } while (false)
+
+#define array_free(array) \
+    do { \
+        free((array).data); \
+        (array).data = NULL; \
+        (array).size = 0; \
+        (array).capacity = 0; \
+    } while (false)
+
+int byte_popcount(uint8_t value) {
+    return __builtin_popcountg(value);
+}
+
+int byte_ctz(uint8_t value) {
+    return __builtin_ctzg(value);
+}
+
+bool byte_has_single_bit(uint8_t value) {
+    return byte_popcount(value) == 1;
+}
+
 typedef struct {
     // Both corner state and center state are stored in 2 bits, as there are only four possibilities
     // for either in LSE.
@@ -167,14 +195,39 @@ lse_state_t generate_random_lse_state() {
     lse_state.ul_ur_state ^= (edge_orientation << 1) & LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK;
     lse_state.df_db_state ^= (edge_orientation << 2) & LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK;
 
-    bool has_illegal_eo = __builtin_popcount(
+    bool has_illegal_eo = byte_has_single_bit(
         (lse_state.uf_ub_state ^ lse_state.ul_ur_state ^ lse_state.df_db_state) & LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK
-    ) == 1;
+    );
     if (has_illegal_eo) {
         lse_state.df_db_state ^= LSE_STATE_EDGE_ORIENTATION_MASK;
     }
 
     return lse_state;
+}
+
+bool is_lse_solved(lse_state_t lse_state) {
+    return memcmp(&lse_state, &SOLVED_LSE_STATE, sizeof(lse_state)) == 0;
+}
+
+// Checks if EOLR is solved if the UL/UR edges are in the UF/UB slots
+bool was_eolr_just_solved(lse_state_t lse_state) {
+    bool is_ul_ur_solved = lse_state.uf_ub_state == ((LSE_STATE_EDGE_INDEX_UL << 4) | LSE_STATE_EDGE_INDEX_UR) ||
+                          lse_state.uf_ub_state == ((LSE_STATE_EDGE_INDEX_UR << 4) | LSE_STATE_EDGE_INDEX_UL);
+
+    uint8_t df_db_eo = lse_state.df_db_state & LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK;
+    uint8_t ul_ur_eo = lse_state.ul_ur_state & LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK;
+    bool matching_eo = df_db_eo == ul_ur_eo && !byte_has_single_bit(df_db_eo);
+
+    bool eo_matches_centers = (bool)(lse_state.center_corner_state & LSE_STATE_CENTER_STATE_INCREMENT) ==
+                              (bool)(lse_state.df_db_state & LSE_STATE_EDGE_ORIENTATION_MASK);
+
+    uint8_t corner_state = lse_state.center_corner_state & LSE_STATE_CORNER_STATE_MASK;
+    bool is_ul_in_ub = (lse_state.uf_ub_state & LSE_STATE_EDGE_INDEX_MASK) == LSE_STATE_EDGE_INDEX_UL;
+
+    const uint8_t CORNER_MOD = LSE_STATE_CORNER_STATE_INCREMENT;
+    bool corners_align_with_ul_ur = (bool)(corner_state & CORNER_MOD) && (corner_state == CORNER_MOD) == is_ul_in_ub;
+
+    return is_ul_ur_solved && matching_eo && eo_matches_centers && corners_align_with_ul_ur;
 }
 
 typedef enum : uint8_t {
@@ -188,6 +241,18 @@ typedef enum : uint8_t {
 
 #define LSE_MOVE_TYPE_MASK  0b100
 #define LSE_MOVE_COUNT_MASK 0b011
+
+const char* lse_move_to_string(lse_move_e move) {
+    switch (move) {
+        case LSE_MOVE_U:       return "U";
+        case LSE_MOVE_U2:      return "U2";
+        case LSE_MOVE_U_PRIME: return "U'";
+        case LSE_MOVE_M:       return "M";
+        case LSE_MOVE_M2:      return "M2";
+        case LSE_MOVE_M_PRIME: return "M'";
+    }
+    assert(false);
+}
 
 typedef struct {
     lse_move_e* data;
@@ -209,6 +274,145 @@ void lse_move_list_simplify_append(lse_move_list_t* list, lse_move_e move) {
         }
     }
     array_append(*list, move);
+}
+
+typedef struct {
+    lse_move_list_t* data;
+    size_t size;
+    size_t capacity;
+} lse_solution_list_t;
+
+void free_lse_solution_list(lse_solution_list_t* solution_list) {
+    for (int i = 0; i < solution_list->size; i++) {
+        array_free(solution_list->data[i]);
+    }
+    array_free(*solution_list);
+}
+
+void _solve_eolr_recursive_m(lse_state_t lse_state, lse_move_list_t* moves, lse_solution_list_t* solutions, int depth);
+
+void _solve_eolr_recursive_u(lse_state_t lse_state, lse_move_list_t* moves, lse_solution_list_t* solutions, int depth) {
+    if (was_eolr_just_solved(lse_state)) {
+        lse_move_list_t solution = {};
+        array_copy(*moves, solution);
+        array_append(*solutions, solution);
+        return;
+    }
+    if (depth <= 0) {
+        return;
+    }
+
+    array_append(*moves, LSE_MOVE_U);
+    _solve_eolr_recursive_m(lse_move_u(lse_state), moves, solutions, depth - 1);
+
+    moves->data[moves->size - 1] = LSE_MOVE_U_PRIME;
+    _solve_eolr_recursive_m(lse_move_u_prime(lse_state), moves, solutions, depth - 1);
+
+    moves->data[moves->size - 1] = LSE_MOVE_U2;
+    _solve_eolr_recursive_m(lse_move_u2(lse_state), moves, solutions, depth - 1);
+
+    moves->size--;
+}
+
+void _solve_eolr_recursive_m(lse_state_t lse_state, lse_move_list_t* moves, lse_solution_list_t* solutions, int depth) {
+    if (was_eolr_just_solved(lse_state)) {
+        lse_move_list_t solution = {};
+        array_copy(*moves, solution);
+        array_append(*solutions, solution);
+        return;
+    }
+    if (depth <= 0) {
+        return;
+    }
+
+    array_append(*moves, LSE_MOVE_M);
+    _solve_eolr_recursive_u(lse_move_m(lse_state), moves, solutions, depth - 1);
+
+    moves->data[moves->size - 1] = LSE_MOVE_M_PRIME;
+    _solve_eolr_recursive_u(lse_move_m_prime(lse_state), moves, solutions, depth - 1);
+
+    moves->data[moves->size - 1] = LSE_MOVE_M2;
+    _solve_eolr_recursive_u(lse_move_m2(lse_state), moves, solutions, depth - 1);
+
+    moves->size--;
+}
+
+lse_solution_list_t solve_eolr(lse_state_t lse_state) {
+    lse_move_list_t moves = {};
+
+    lse_solution_list_t solutions = {};
+    // TODO: Maximum number of moves to solve EOLR
+    for (int depth = 0; depth <= 18 && solutions.size == 0; depth++) {
+        printf("Searching depth %i\n", depth);
+        _solve_eolr_recursive_u(lse_state, &moves, &solutions, depth);
+        _solve_eolr_recursive_m(lse_state, &moves, &solutions, depth);
+    }
+    array_free(moves);
+
+    return solutions;
+}
+
+void _solve_lse_recursive_m(lse_state_t lse_state, lse_move_list_t* moves, lse_solution_list_t* solutions, int depth);
+
+void _solve_lse_recursive_u(lse_state_t lse_state, lse_move_list_t* moves, lse_solution_list_t* solutions, int depth) {
+    if (is_lse_solved(lse_state)) {
+        lse_move_list_t solution = {};
+        array_copy(*moves, solution);
+        array_append(*solutions, solution);
+        return;
+    }
+    if (depth <= 0) {
+        return;
+    }
+
+    array_append(*moves, LSE_MOVE_U);
+    _solve_lse_recursive_m(lse_move_u(lse_state), moves, solutions, depth - 1);
+
+    moves->data[moves->size - 1] = LSE_MOVE_U_PRIME;
+    _solve_lse_recursive_m(lse_move_u_prime(lse_state), moves, solutions, depth - 1);
+
+    moves->data[moves->size - 1] = LSE_MOVE_U2;
+    _solve_lse_recursive_m(lse_move_u2(lse_state), moves, solutions, depth - 1);
+
+    moves->size--;
+}
+
+void _solve_lse_recursive_m(lse_state_t lse_state, lse_move_list_t* moves, lse_solution_list_t* solutions, int depth) {
+    if (is_lse_solved(lse_state)) {
+        lse_move_list_t solution = {};
+        array_copy(*moves, solution);
+        array_append(*solutions, solution);
+        return;
+    }
+    if (depth <= 0) {
+        return;
+    }
+
+    array_append(*moves, LSE_MOVE_M);
+    _solve_lse_recursive_u(lse_move_m(lse_state), moves, solutions, depth - 1);
+
+    moves->data[moves->size - 1] = LSE_MOVE_M_PRIME;
+    _solve_lse_recursive_u(lse_move_m_prime(lse_state), moves, solutions, depth - 1);
+
+    moves->data[moves->size - 1] = LSE_MOVE_M2;
+    _solve_lse_recursive_u(lse_move_m2(lse_state), moves, solutions, depth - 1);
+
+    moves->size--;
+}
+
+lse_solution_list_t solve_lse(lse_state_t lse_state) {
+    lse_move_list_t moves = {};
+
+    lse_solution_list_t solutions = {};
+    // TODO: Maximum number of moves to solve LSE
+    for (int depth = 0; depth <= 18 && solutions.size == 0; depth++) {
+        printf("Searching depth %i\n", depth);
+        _solve_lse_recursive_u(lse_state, &moves, &solutions, depth);
+        _solve_lse_recursive_m(lse_state, &moves, &solutions, depth);
+    }
+    array_free(moves);
+
+    return solutions;
 }
 
 typedef enum : uint8_t {
@@ -278,7 +482,7 @@ typedef enum {
     VISUAL_CUBE_EDGE_DL = (1 << FACE_INDEX_D) | (1 << FACE_INDEX_L)
 } visual_cube_edge_e;
 
-typedef enum {
+typedef enum : uint8_t {
     VISUAL_CUBE_CORNER_UBL = (1 << FACE_INDEX_U) | (1 << FACE_INDEX_B) | (1 << FACE_INDEX_L),
     VISUAL_CUBE_CORNER_UBR = (1 << FACE_INDEX_U) | (1 << FACE_INDEX_B) | (1 << FACE_INDEX_R),
     VISUAL_CUBE_CORNER_UFR = (1 << FACE_INDEX_U) | (1 << FACE_INDEX_F) | (1 << FACE_INDEX_R),
@@ -324,8 +528,8 @@ int visual_cube_get_corner_sticker_index(visual_cube_corner_e corner, face_index
 }
 
 void visual_cube_state_write_lse_state_edge(visual_cube_state_t* visual_cube_state, visual_cube_edge_e edge, int state) {
-    face_index_e primary_face_index   = __builtin_ctz(edge);
-    face_index_e secondary_face_index = __builtin_ctz(edge ^ (1 << primary_face_index));
+    face_index_e primary_face_index   = byte_ctz(edge);
+    face_index_e secondary_face_index = byte_ctz(edge ^ (1 << primary_face_index));
 
     int primary_sticker_index   = visual_cube_get_edge_sticker_index(primary_face_index, secondary_face_index);
     int secondary_sticker_index = visual_cube_get_edge_sticker_index(secondary_face_index, primary_face_index);
@@ -340,9 +544,9 @@ void visual_cube_state_write_center(visual_cube_state_t* visual_cube_state, face
 
 void visual_cube_state_write_corner(visual_cube_state_t* visual_cube_state, visual_cube_corner_e corner,
                                     face_index_e primary_sticker, face_index_e secondary_sticker, face_index_e tertiary_sticker) {
-    face_index_e primary_face_index   = __builtin_ctz(corner);
-    face_index_e secondary_face_index = __builtin_ctz(corner ^ (1 << primary_face_index));
-    face_index_e tertiary_face_index  = __builtin_ctz(corner ^ (1 << primary_face_index) ^ (1 << secondary_face_index));
+    face_index_e primary_face_index   = byte_ctz(corner);
+    face_index_e secondary_face_index = byte_ctz(corner ^ (1 << primary_face_index));
+    face_index_e tertiary_face_index  = byte_ctz(corner ^ (1 << primary_face_index) ^ (1 << secondary_face_index));
 
     int primary_sticker_index   = visual_cube_get_corner_sticker_index(corner, primary_face_index);
     int secondary_sticker_index = visual_cube_get_corner_sticker_index(corner, secondary_face_index);
@@ -491,11 +695,12 @@ typedef struct {
 
 static lse_state_list_t prev_lse_states = {};
 
-void execute_command_scramble(lse_state_t* lse_state, lse_move_list_t* lse_move_list) {
+void execute_command_scramble(lse_state_t* lse_state, lse_move_list_t* lse_move_list, lse_solution_list_t* lse_solution_list) {
     *lse_state = generate_random_lse_state();
     array_append(prev_lse_states, *lse_state);
 
     lse_move_list->size = 0;
+    free_lse_solution_list(lse_solution_list);
 }
 
 void execute_command_curr_scramble(lse_state_t* lse_state, lse_move_list_t* lse_move_list)
@@ -509,7 +714,7 @@ void execute_command_curr_scramble(lse_state_t* lse_state, lse_move_list_t* lse_
     lse_move_list->size = 0;
 }
 
-void execute_command_prev_scramble(lse_state_t* lse_state, lse_move_list_t* lse_move_list) {
+void execute_command_prev_scramble(lse_state_t* lse_state, lse_move_list_t* lse_move_list, lse_solution_list_t* lse_solution_list) {
     if (prev_lse_states.size >= 2) {
         *lse_state = prev_lse_states.data[prev_lse_states.size - 2];
         prev_lse_states.size--;
@@ -519,9 +724,10 @@ void execute_command_prev_scramble(lse_state_t* lse_state, lse_move_list_t* lse_
     }
 
     lse_move_list->size = 0;
+    free_lse_solution_list(lse_solution_list);
 }
 
-void read_and_execute_command(lse_state_t* lse_state, lse_move_list_t* lse_move_list) {
+void read_and_execute_command(lse_state_t* lse_state, lse_move_list_t* lse_move_list, lse_solution_list_t* lse_solution_list) {
     restore_initial_mode();
 
     char command[16] = {};
@@ -529,13 +735,21 @@ void read_and_execute_command(lse_state_t* lse_state, lse_move_list_t* lse_move_
         clear_trailing_whitespace(command);
 
         if (strcmp(command, "scramble") == 0) {
-            execute_command_scramble(lse_state, lse_move_list);
+            execute_command_scramble(lse_state, lse_move_list, lse_solution_list);
         }
         if (strcmp(command, "prev") == 0) {
-            execute_command_prev_scramble(lse_state, lse_move_list);
+            execute_command_prev_scramble(lse_state, lse_move_list, lse_solution_list);
         }
         if (strcmp(command, "curr") == 0) {
             execute_command_curr_scramble(lse_state, lse_move_list);
+        }
+        if (strcmp(command, "eolr") == 0) {
+            free_lse_solution_list(lse_solution_list);
+            *lse_solution_list = solve_eolr(*lse_state);
+        }
+        if (strcmp(command, "lse") == 0) {
+            free_lse_solution_list(lse_solution_list);
+            *lse_solution_list = solve_lse(*lse_state);
         }
     }
 
@@ -547,6 +761,7 @@ int main() {
 
     lse_state_t lse_state = SOLVED_LSE_STATE;
     lse_move_list_t lse_move_list = {};
+    lse_solution_list_t lse_solution_list = {};
 
     enter_raw_mode();
     while (true) {
@@ -567,10 +782,17 @@ int main() {
         }
         printf("\n(%zu STM)\n", lse_move_list.size);
 
-        char c;
+        printf("Solutions:\n");
+        for (int i = 0; i < lse_solution_list.size; i++) {
+            lse_move_list_t solution = lse_solution_list.data[i];
+            for (int j = 0; j < solution.size; j++) {
+                printf("%s ", lse_move_to_string(solution.data[j]));
+            }
+            printf("(%zu STM)\n", solution.size);
+        }
+
         handle_input:
-        c = getchar();
-        switch (c) {
+        switch (getchar()) {
             case 'm':
                 lse_state = lse_move_m(lse_state);
                 lse_move_list_simplify_append(&lse_move_list, LSE_MOVE_M);
@@ -589,16 +811,16 @@ int main() {
                 continue;
             case '/':
                 printf("/");
-                read_and_execute_command(&lse_state, &lse_move_list);
+                read_and_execute_command(&lse_state, &lse_move_list, &lse_solution_list);
                 continue;
             case '\n':
-                execute_command_scramble(&lse_state, &lse_move_list);
+                execute_command_scramble(&lse_state, &lse_move_list, &lse_solution_list);
                 continue;
             case ' ':
                 execute_command_curr_scramble(&lse_state, &lse_move_list);
                 continue;
             case 'p':
-                execute_command_prev_scramble(&lse_state, &lse_move_list);
+                execute_command_prev_scramble(&lse_state, &lse_move_list, &lse_solution_list);
                 continue;
             case 'q': break;
             default: goto handle_input;
