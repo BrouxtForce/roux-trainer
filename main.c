@@ -584,8 +584,9 @@ void lse_state_write_visual_cube_state(lse_state_t lse_state, visual_cube_state_
     visual_cube_state_write_corner(visual_cube_state, VISUAL_CUBE_CORNER_UFL, FACE_INDEX_U, face_index_f, face_index_l);
 }
 
-#define ESC_ERASE_ENTIRE_SCREEN "\x1b[2J"
-#define ESC_MOVE_CURSOR_HOME    "\x1b[H"
+#define ESC_ERASE_ENTIRE_SCREEN "\x1b[H\x1b[0J"
+#define ESC_SAVE_SCREEN "\x1b[?47h"
+#define ESC_RESTORE_SCREEN "\x1b[?47l"
 
 #define ESC_COLOR_WHITE  "\x1b[47m"
 #define ESC_COLOR_ORANGE "\x1b[48;5;208m"
@@ -614,10 +615,6 @@ void restore_initial_mode() {
     if (is_initial_termios_state_initialized) {
         tcsetattr(STDIN_FILENO, TCSAFLUSH, &initial_termios_state);
     }
-}
-
-void reset_screen() {
-    printf(ESC_ERASE_ENTIRE_SCREEN ESC_MOVE_CURSOR_HOME);
 }
 
 void draw_face_color(face_index_e face_index) {
@@ -763,9 +760,11 @@ int main() {
     lse_move_list_t lse_move_list = {};
     lse_solution_list_t lse_solution_list = {};
 
+    printf(ESC_SAVE_SCREEN);
+
     enter_raw_mode();
     while (true) {
-        reset_screen();
+        printf(ESC_ERASE_ENTIRE_SCREEN);
         draw_lse_state(lse_state);
         for (int i = 0; i < lse_move_list.size; i++) {
             if (i != 0) {
@@ -826,9 +825,12 @@ int main() {
             default: goto handle_input;
         }
 
-        reset_screen();
+        printf(ESC_ERASE_ENTIRE_SCREEN);
         break;
     }
+    restore_initial_mode();
+
+    printf(ESC_RESTORE_SCREEN);
 
     return 0;
 }
