@@ -9,6 +9,8 @@
 #include <time.h>
 #include <stdlib.h>
 
+#include "kociemba.c"
+
 #define array_append(array, element) \
     do { \
         if ((array).size >= (array).capacity) { \
@@ -95,7 +97,7 @@ const lse_state_t SOLVED_LSE_STATE = {
 lse_state_t lse_move_u(lse_state_t lse_state) {
     uint8_t swap = lse_state.ul_ur_state;
     lse_state.ul_ur_state = lse_state.uf_ub_state;
-    lse_state.uf_ub_state = (swap << 4) | (swap >> 4);
+    lse_state.uf_ub_state = byte_rotate_left(swap, 4);
 
     lse_state.center_corner_state += LSE_STATE_CORNER_STATE_INCREMENT;
     lse_state.center_corner_state &= LSE_STATE_CORNER_CENTER_STATE_MASK;
@@ -106,7 +108,7 @@ lse_state_t lse_move_u(lse_state_t lse_state) {
 lse_state_t lse_move_u_prime(lse_state_t lse_state) {
     uint8_t swap = lse_state.uf_ub_state;
     lse_state.uf_ub_state = lse_state.ul_ur_state;
-    lse_state.ul_ur_state = (swap << 4) | (swap >> 4);
+    lse_state.ul_ur_state = byte_rotate_left(swap, 4);
 
     lse_state.center_corner_state += 3 * LSE_STATE_CORNER_STATE_INCREMENT;
     lse_state.center_corner_state &= LSE_STATE_CORNER_CENTER_STATE_MASK;
@@ -115,8 +117,8 @@ lse_state_t lse_move_u_prime(lse_state_t lse_state) {
 }
 
 lse_state_t lse_move_u2(lse_state_t lse_state) {
-    lse_state.uf_ub_state = (lse_state.uf_ub_state << 4) | (lse_state.uf_ub_state >> 4);
-    lse_state.ul_ur_state = (lse_state.ul_ur_state << 4) | (lse_state.ul_ur_state >> 4);
+    lse_state.uf_ub_state = byte_rotate_left(lse_state.uf_ub_state, 4);
+    lse_state.ul_ur_state = byte_rotate_left(lse_state.ul_ur_state, 4);
 
     lse_state.center_corner_state += 2 * LSE_STATE_CORNER_STATE_INCREMENT;
     lse_state.center_corner_state &= LSE_STATE_CORNER_CENTER_STATE_MASK;
@@ -127,8 +129,8 @@ lse_state_t lse_move_u2(lse_state_t lse_state) {
 lse_state_t lse_move_m(lse_state_t lse_state) {
     uint8_t prev_uf_ub_state = lse_state.uf_ub_state;
     uint8_t prev_df_db_state = lse_state.df_db_state;
-    lse_state.uf_ub_state = ((prev_uf_ub_state << 4) | (prev_df_db_state & 0b00001111)) ^ LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK;
-    lse_state.df_db_state = ((prev_df_db_state >> 4) | (prev_uf_ub_state & 0b11110000)) ^ LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK;
+    lse_state.uf_ub_state = (uint8_t)(((prev_uf_ub_state << 4) | (prev_df_db_state & 0b00001111)) ^ LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK);
+    lse_state.df_db_state = (uint8_t)(((prev_df_db_state >> 4) | (prev_uf_ub_state & 0b11110000)) ^ LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK);
 
     lse_state.center_corner_state += LSE_STATE_CENTER_STATE_INCREMENT;
     lse_state.center_corner_state &= LSE_STATE_CORNER_CENTER_STATE_MASK;
@@ -139,8 +141,8 @@ lse_state_t lse_move_m(lse_state_t lse_state) {
 lse_state_t lse_move_m_prime(lse_state_t lse_state) {
     uint8_t prev_uf_ub_state = lse_state.uf_ub_state;
     uint8_t prev_df_db_state = lse_state.df_db_state;
-    lse_state.uf_ub_state = ((prev_uf_ub_state >> 4) | (prev_df_db_state & 0b11110000)) ^ LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK;
-    lse_state.df_db_state = ((prev_df_db_state << 4) | (prev_uf_ub_state & 0b00001111)) ^ LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK;
+    lse_state.uf_ub_state = (uint8_t)(((prev_uf_ub_state >> 4) | (prev_df_db_state & 0b11110000)) ^ LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK);
+    lse_state.df_db_state = (uint8_t)(((prev_df_db_state << 4) | (prev_uf_ub_state & 0b00001111)) ^ LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK);
 
     lse_state.center_corner_state += 3 * LSE_STATE_CENTER_STATE_INCREMENT;
     lse_state.center_corner_state &= LSE_STATE_CORNER_CENTER_STATE_MASK;
@@ -150,8 +152,8 @@ lse_state_t lse_move_m_prime(lse_state_t lse_state) {
 
 lse_state_t lse_move_m2(lse_state_t lse_state) {
     uint8_t swap = lse_state.uf_ub_state;
-    lse_state.uf_ub_state = (lse_state.df_db_state << 4) | (lse_state.df_db_state >> 4);
-    lse_state.df_db_state = (swap << 4) | (swap >> 4);
+    lse_state.uf_ub_state = byte_rotate_left(lse_state.df_db_state, 4);
+    lse_state.df_db_state = byte_rotate_left(swap, 4);
 
     lse_state.center_corner_state += 2 * LSE_STATE_CENTER_STATE_INCREMENT;
     lse_state.center_corner_state &= LSE_STATE_CORNER_CENTER_STATE_MASK;
@@ -186,9 +188,9 @@ lse_state_t generate_random_lse_state() {
     }
     assert(is_even_parity);
 
-    lse_state.uf_ub_state = (edge_indices[LSE_STATE_EDGE_INDEX_UF] << 4) | edge_indices[LSE_STATE_EDGE_INDEX_UB];
-    lse_state.ul_ur_state = (edge_indices[LSE_STATE_EDGE_INDEX_UL] << 4) | edge_indices[LSE_STATE_EDGE_INDEX_UR];
-    lse_state.df_db_state = (edge_indices[LSE_STATE_EDGE_INDEX_DF] << 4) | edge_indices[LSE_STATE_EDGE_INDEX_DB];
+    lse_state.uf_ub_state = (uint8_t)((edge_indices[LSE_STATE_EDGE_INDEX_UF] << 4) | edge_indices[LSE_STATE_EDGE_INDEX_UB]);
+    lse_state.ul_ur_state = (uint8_t)((edge_indices[LSE_STATE_EDGE_INDEX_UL] << 4) | edge_indices[LSE_STATE_EDGE_INDEX_UR]);
+    lse_state.df_db_state = (uint8_t)((edge_indices[LSE_STATE_EDGE_INDEX_DF] << 4) | edge_indices[LSE_STATE_EDGE_INDEX_DB]);
 
     int edge_orientation = rand();
     lse_state.uf_ub_state ^= (edge_orientation << 0) & LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK;
@@ -268,7 +270,7 @@ void lse_move_list_simplify_append(lse_move_list_t* list, lse_move_e move) {
             if (move_count == 0) {
                 list->size--;
             } else {
-                *prev_move = (move & LSE_MOVE_TYPE_MASK) | move_count;
+                *prev_move = (lse_move_e)((move & LSE_MOVE_TYPE_MASK) | move_count);
             }
             return;
         }
@@ -467,7 +469,7 @@ typedef struct {
     face_index_e stickers[6][9];
 } visual_cube_state_t;
 
-typedef enum {
+typedef enum : uint8_t {
     VISUAL_CUBE_EDGE_UB = (1 << FACE_INDEX_U) | (1 << FACE_INDEX_B),
     VISUAL_CUBE_EDGE_UR = (1 << FACE_INDEX_U) | (1 << FACE_INDEX_R),
     VISUAL_CUBE_EDGE_UF = (1 << FACE_INDEX_U) | (1 << FACE_INDEX_F),
@@ -504,7 +506,7 @@ void visual_cube_state_reset(visual_cube_state_t* visual_cube_state) {
 int visual_cube_get_edge_sticker_index(face_index_e primary_face_index, face_index_e secondary_face_index) {
     static int index_lookup_table[6][6] = {
         [FACE_INDEX_U] = { [FACE_INDEX_B] = 1, [FACE_INDEX_R] = 5, [FACE_INDEX_F] = 7, [FACE_INDEX_L] = 3 },
-        [FACE_INDEX_D] = { [FACE_INDEX_F] = 1, [FACE_INDEX_R] = 5, [FACE_INDEX_B] = 7, [FACE_INDEX_D] = 3 },
+        [FACE_INDEX_D] = { [FACE_INDEX_F] = 1, [FACE_INDEX_R] = 5, [FACE_INDEX_B] = 7, [FACE_INDEX_L] = 3 },
         [FACE_INDEX_F] = { [FACE_INDEX_U] = 1, [FACE_INDEX_R] = 5, [FACE_INDEX_D] = 7, [FACE_INDEX_L] = 3 },
         [FACE_INDEX_B] = { [FACE_INDEX_U] = 1, [FACE_INDEX_L] = 5, [FACE_INDEX_D] = 7, [FACE_INDEX_R] = 3 },
         [FACE_INDEX_R] = { [FACE_INDEX_U] = 1, [FACE_INDEX_B] = 5, [FACE_INDEX_D] = 7, [FACE_INDEX_F] = 3 },
@@ -528,8 +530,8 @@ int visual_cube_get_corner_sticker_index(visual_cube_corner_e corner, face_index
 }
 
 void visual_cube_state_write_lse_state_edge(visual_cube_state_t* visual_cube_state, visual_cube_edge_e edge, int state) {
-    face_index_e primary_face_index   = byte_ctz(edge);
-    face_index_e secondary_face_index = byte_ctz(edge ^ (1 << primary_face_index));
+    face_index_e primary_face_index   = (face_index_e)byte_ctz(edge);
+    face_index_e secondary_face_index = (face_index_e)byte_ctz((uint8_t)(edge ^ (1 << primary_face_index)));
 
     int primary_sticker_index   = visual_cube_get_edge_sticker_index(primary_face_index, secondary_face_index);
     int secondary_sticker_index = visual_cube_get_edge_sticker_index(secondary_face_index, primary_face_index);
@@ -544,9 +546,9 @@ void visual_cube_state_write_center(visual_cube_state_t* visual_cube_state, face
 
 void visual_cube_state_write_corner(visual_cube_state_t* visual_cube_state, visual_cube_corner_e corner,
                                     face_index_e primary_sticker, face_index_e secondary_sticker, face_index_e tertiary_sticker) {
-    face_index_e primary_face_index   = byte_ctz(corner);
-    face_index_e secondary_face_index = byte_ctz(corner ^ (1 << primary_face_index));
-    face_index_e tertiary_face_index  = byte_ctz(corner ^ (1 << primary_face_index) ^ (1 << secondary_face_index));
+    face_index_e primary_face_index   = (face_index_e)byte_ctz(corner);
+    face_index_e secondary_face_index = (face_index_e)byte_ctz((uint8_t)(corner ^ (1 << primary_face_index)));
+    face_index_e tertiary_face_index  = (face_index_e)byte_ctz((uint8_t)(corner ^ (1 << primary_face_index) ^ (1 << secondary_face_index)));
 
     int primary_sticker_index   = visual_cube_get_corner_sticker_index(corner, primary_face_index);
     int secondary_sticker_index = visual_cube_get_corner_sticker_index(corner, secondary_face_index);
@@ -582,6 +584,86 @@ void lse_state_write_visual_cube_state(lse_state_t lse_state, visual_cube_state_
     visual_cube_state_write_corner(visual_cube_state, VISUAL_CUBE_CORNER_UBR, FACE_INDEX_U, face_index_b, face_index_r);
     visual_cube_state_write_corner(visual_cube_state, VISUAL_CUBE_CORNER_UFR, FACE_INDEX_U, face_index_f, face_index_r);
     visual_cube_state_write_corner(visual_cube_state, VISUAL_CUBE_CORNER_UFL, FACE_INDEX_U, face_index_f, face_index_l);
+}
+
+void visual_cube_state_write_edge_g(visual_cube_state_t* visual_cube_state, visual_cube_edge_e edge, g1_edge_index_e piece, bool orientation) {
+    face_index_e primary_face_index   = (face_index_e)byte_ctz(edge);
+    face_index_e secondary_face_index = (face_index_e)byte_ctz((uint8_t)(edge ^ (1 << primary_face_index)));
+
+    int primary_sticker_index   = visual_cube_get_edge_sticker_index(primary_face_index, secondary_face_index);
+    int secondary_sticker_index = visual_cube_get_edge_sticker_index(secondary_face_index, primary_face_index);
+
+    static face_index_e g1_edge_faces_lookup[][2] = {
+        [G1_EDGE_INDEX_UF] = { FACE_INDEX_U, FACE_INDEX_F },
+        [G1_EDGE_INDEX_UB] = { FACE_INDEX_U, FACE_INDEX_B },
+        [G1_EDGE_INDEX_UL] = { FACE_INDEX_U, FACE_INDEX_L },
+        [G1_EDGE_INDEX_UR] = { FACE_INDEX_U, FACE_INDEX_R },
+        [G1_EDGE_INDEX_DF] = { FACE_INDEX_D, FACE_INDEX_F },
+        [G1_EDGE_INDEX_DB] = { FACE_INDEX_D, FACE_INDEX_B },
+        [G1_EDGE_INDEX_DL] = { FACE_INDEX_D, FACE_INDEX_L },
+        [G1_EDGE_INDEX_DR] = { FACE_INDEX_D, FACE_INDEX_R },
+        [G1_EDGE_INDEX_FL] = { FACE_INDEX_F, FACE_INDEX_L },
+        [G1_EDGE_INDEX_FR] = { FACE_INDEX_F, FACE_INDEX_R },
+        [G1_EDGE_INDEX_BL] = { FACE_INDEX_B, FACE_INDEX_L },
+        [G1_EDGE_INDEX_BR] = { FACE_INDEX_B, FACE_INDEX_R }
+    };
+
+    visual_cube_state->stickers[ primary_face_index ][ primary_sticker_index ] = g1_edge_faces_lookup[piece][orientation];
+    visual_cube_state->stickers[secondary_face_index][secondary_sticker_index] = g1_edge_faces_lookup[piece][orientation ^ 1];
+}
+
+void visual_cube_state_write_corner_g(visual_cube_state_t* visual_cube_state, visual_cube_corner_e corner, g1_corner_index_e piece, int orientation) {
+    assert(orientation >= 0 && orientation <= 2);
+
+    // The faces of each corner are ordered in a clockwise direction, and each array is extended by two
+    // to avoid having to take the modulus
+    static const face_index_e g1_corner_faces_lookup[][5] = {
+        [G1_CORNER_INDEX_UFR] = { FACE_INDEX_U, FACE_INDEX_R, FACE_INDEX_F, FACE_INDEX_U, FACE_INDEX_R },
+        [G1_CORNER_INDEX_UFL] = { FACE_INDEX_U, FACE_INDEX_F, FACE_INDEX_L, FACE_INDEX_U, FACE_INDEX_F },
+        [G1_CORNER_INDEX_UBR] = { FACE_INDEX_U, FACE_INDEX_B, FACE_INDEX_R, FACE_INDEX_U, FACE_INDEX_B },
+        [G1_CORNER_INDEX_UBL] = { FACE_INDEX_U, FACE_INDEX_L, FACE_INDEX_B, FACE_INDEX_U, FACE_INDEX_L },
+        [G1_CORNER_INDEX_DFR] = { FACE_INDEX_D, FACE_INDEX_F, FACE_INDEX_R, FACE_INDEX_D, FACE_INDEX_F },
+        [G1_CORNER_INDEX_DFL] = { FACE_INDEX_D, FACE_INDEX_L, FACE_INDEX_F, FACE_INDEX_D, FACE_INDEX_L },
+        [G1_CORNER_INDEX_DBR] = { FACE_INDEX_D, FACE_INDEX_R, FACE_INDEX_B, FACE_INDEX_D, FACE_INDEX_R },
+        [G1_CORNER_INDEX_DBL] = { FACE_INDEX_D, FACE_INDEX_B, FACE_INDEX_L, FACE_INDEX_D, FACE_INDEX_B }
+    };
+
+    face_index_e faces[3] = {};
+    memcpy(&faces, g1_corner_faces_lookup[piece] + orientation, sizeof faces);
+
+    // Depending on which corner we are attempting to set, we may need to swap two of the stickers due to the
+    // primary, secondary, and tertiary stickers not being ordered consistently in a clockwise or counterclockwise
+    // direction.
+    if ((byte_popcount(corner ^ VISUAL_CUBE_CORNER_UFL) & 2) == 2) {
+        face_index_e swap = faces[1];
+        faces[1] = faces[2];
+        faces[2] = swap;
+    }
+    visual_cube_state_write_corner(visual_cube_state, corner, faces[0], faces[1], faces[2]);
+}
+
+void g0_g1_state_write_visual_cube_state(visual_cube_state_t* visual_cube_state, g0_state_t g0_state, g1_state_t g1_state) {
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_UF, g1_state.uf_ub_edges >> 4,     (g0_state.ub_ur_uf_ul_edges >> 2) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_UB, g1_state.uf_ub_edges & 0b1111, (g0_state.ub_ur_uf_ul_edges >> 6) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_UL, g1_state.ul_ur_edges >> 4,     (g0_state.ub_ur_uf_ul_edges >> 0) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_UR, g1_state.ul_ur_edges & 0b1111, (g0_state.ub_ur_uf_ul_edges >> 4) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_DF, g1_state.df_db_edges >> 4,     (g0_state.df_dr_db_dl_edges >> 6) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_DB, g1_state.df_db_edges & 0b1111, (g0_state.df_dr_db_dl_edges >> 2) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_DL, g1_state.dl_dr_edges >> 4,     (g0_state.df_dr_db_dl_edges >> 0) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_DR, g1_state.dl_dr_edges & 0b1111, (g0_state.df_dr_db_dl_edges >> 4) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_FL, g1_state.fl_fr_edges >> 4,     (g0_state.bl_fr_br_fl_edges >> 0) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_FR, g1_state.fl_fr_edges & 0b1111, (g0_state.bl_fr_br_fl_edges >> 4) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_BL, g1_state.bl_br_edges >> 4,     (g0_state.bl_fr_br_fl_edges >> 6) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_BR, g1_state.bl_br_edges & 0b1111, (g0_state.bl_fr_br_fl_edges >> 2) & 1);
+
+    visual_cube_state_write_corner_g(visual_cube_state, VISUAL_CUBE_CORNER_UFR, g1_state.ufr_ubl_corners >> 4,     (g0_state.ufl_ufr_ubr_ubl_corners >> 8 ) & 0b11);
+    visual_cube_state_write_corner_g(visual_cube_state, VISUAL_CUBE_CORNER_UBL, g1_state.ufr_ubl_corners & 0b1111, (g0_state.ufl_ufr_ubr_ubl_corners >> 0 ) & 0b11);
+    visual_cube_state_write_corner_g(visual_cube_state, VISUAL_CUBE_CORNER_UFL, g1_state.ufl_ubr_corners >> 4,     (g0_state.ufl_ufr_ubr_ubl_corners >> 12) & 0b11);
+    visual_cube_state_write_corner_g(visual_cube_state, VISUAL_CUBE_CORNER_UBR, g1_state.ufl_ubr_corners & 0b1111, (g0_state.ufl_ufr_ubr_ubl_corners >> 4 ) & 0b11);
+    visual_cube_state_write_corner_g(visual_cube_state, VISUAL_CUBE_CORNER_DFR, g1_state.dfr_dbl_corners >> 4,     (g0_state.dfr_dfl_dbl_dbr_corners >> 12) & 0b11);
+    visual_cube_state_write_corner_g(visual_cube_state, VISUAL_CUBE_CORNER_DBL, g1_state.dfr_dbl_corners & 0b1111, (g0_state.dfr_dfl_dbl_dbr_corners >> 4 ) & 0b11);
+    visual_cube_state_write_corner_g(visual_cube_state, VISUAL_CUBE_CORNER_DFL, g1_state.dfl_dbr_corners >> 4,     (g0_state.dfr_dfl_dbl_dbr_corners >> 8 ) & 0b11);
+    visual_cube_state_write_corner_g(visual_cube_state, VISUAL_CUBE_CORNER_DBR, g1_state.dfl_dbr_corners & 0b1111, (g0_state.dfr_dfl_dbl_dbr_corners >> 0 ) & 0b11);
 }
 
 #define ESC_ERASE_ENTIRE_SCREEN "\x1b[H\x1b[0J"
@@ -675,6 +757,15 @@ void draw_lse_state(lse_state_t lse_state) {
     draw_visual_cube_state(&visual_cube_state);
 }
 
+void draw_g0_g1_cube_state(g0_state_t g0_state, g1_state_t g1_state) {
+    visual_cube_state_t visual_cube_state;
+    visual_cube_state_reset(&visual_cube_state);
+
+    g0_g1_state_write_visual_cube_state(&visual_cube_state, g0_state, g1_state);
+
+    draw_visual_cube_state(&visual_cube_state);
+}
+
 void clear_trailing_whitespace(char* str) {
     for (int i = 0; str[i] != '\0'; i++) {
         if (isspace(str[i])) {
@@ -754,7 +845,7 @@ void read_and_execute_command(lse_state_t* lse_state, lse_move_list_t* lse_move_
 }
 
 int main() {
-    srand(time(NULL));
+    srand((unsigned)time(NULL));
 
     lse_state_t lse_state = SOLVED_LSE_STATE;
     lse_move_list_t lse_move_list = {};
