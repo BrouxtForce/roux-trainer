@@ -1,37 +1,9 @@
-#include <stdint.h>
+#include "kociemba.h"
+
 #include <assert.h>
-
-uint8_t byte_rotate_left(uint8_t value, uint8_t amount) {
-    return __builtin_rotateleft8(value, amount);
-}
-
-uint8_t byte_rotate_right(uint8_t value, uint8_t amount) {
-    return __builtin_rotateright8(value, amount);
-}
-
-uint16_t rotate_left_u16(uint16_t value, uint16_t amount) {
-    return __builtin_rotateleft16(value, amount);
-}
-
-uint16_t rotate_right_u16(uint16_t value, uint16_t amount) {
-    return __builtin_rotateright16(value, amount);
-}
-
-typedef struct {
-    uint8_t ub_ur_uf_ul_edges;
-    uint8_t df_dr_db_dl_edges;
-    uint8_t bl_fr_br_fl_edges;
-    uint16_t ufl_ufr_ubr_ubl_corners;
-    uint16_t dfr_dfl_dbl_dbr_corners;
-} g0_state_t;
-
-const g0_state_t G0_STATE_SOLVED = {
-    .ub_ur_uf_ul_edges = 0,
-    .df_dr_db_dl_edges = 0,
-    .bl_fr_br_fl_edges = 0b10101010,
-    .ufl_ufr_ubr_ubl_corners = 0,
-    .dfr_dfl_dbl_dbr_corners = 0
-};
+#include <string.h>
+#include "common.h"
+#include "visual_cube.h"
 
 #define G0_EDGE_PACKING_ORIENTATION_MASK 0b01010101
 
@@ -177,60 +149,6 @@ void g0_move_b(g0_state_t* state) {
     state->dfr_dfl_dbl_dbr_corners |= (b_face_corners >> 8) & G0_CORNER_PACKING_LOWER_TWO_MASK;
 }
 
-typedef enum : uint8_t {
-    G1_EDGE_INDEX_UF,
-    G1_EDGE_INDEX_UB,
-    G1_EDGE_INDEX_UL,
-    G1_EDGE_INDEX_UR,
-    G1_EDGE_INDEX_DF,
-    G1_EDGE_INDEX_DB,
-    G1_EDGE_INDEX_DL,
-    G1_EDGE_INDEX_DR,
-    G1_EDGE_INDEX_FL,
-    G1_EDGE_INDEX_FR,
-    G1_EDGE_INDEX_BL,
-    G1_EDGE_INDEX_BR
-} g1_edge_index_e;
-
-typedef enum : uint8_t {
-    G1_CORNER_INDEX_UFR,
-    G1_CORNER_INDEX_UFL,
-    G1_CORNER_INDEX_UBR,
-    G1_CORNER_INDEX_UBL,
-    G1_CORNER_INDEX_DFR,
-    G1_CORNER_INDEX_DFL,
-    G1_CORNER_INDEX_DBR,
-    G1_CORNER_INDEX_DBL
-} g1_corner_index_e;
-
-typedef struct {
-    uint8_t uf_ub_edges;
-    uint8_t ul_ur_edges;
-    uint8_t df_db_edges;
-    uint8_t dl_dr_edges;
-    uint8_t fl_fr_edges;
-    uint8_t bl_br_edges;
-
-    uint8_t ufr_ubl_corners;
-    uint8_t ufl_ubr_corners;
-    uint8_t dfr_dbl_corners;
-    uint8_t dfl_dbr_corners;
-} g1_state_t;
-
-const g1_state_t G1_STATE_SOLVED = {
-    .uf_ub_edges = (G1_EDGE_INDEX_UF << 4) | G1_EDGE_INDEX_UB,
-    .ul_ur_edges = (G1_EDGE_INDEX_UL << 4) | G1_EDGE_INDEX_UR,
-    .df_db_edges = (G1_EDGE_INDEX_DF << 4) | G1_EDGE_INDEX_DB,
-    .dl_dr_edges = (G1_EDGE_INDEX_DL << 4) | G1_EDGE_INDEX_DR,
-    .fl_fr_edges = (G1_EDGE_INDEX_FL << 4) | G1_EDGE_INDEX_FR,
-    .bl_br_edges = (G1_EDGE_INDEX_BL << 4) | G1_EDGE_INDEX_BR,
-
-    .ufr_ubl_corners = (G1_CORNER_INDEX_UFR << 4) | G1_CORNER_INDEX_UBL,
-    .ufl_ubr_corners = (G1_CORNER_INDEX_UFL << 4) | G1_CORNER_INDEX_UBR,
-    .dfr_dbl_corners = (G1_CORNER_INDEX_DFR << 4) | G1_CORNER_INDEX_DBL,
-    .dfl_dbr_corners = (G1_CORNER_INDEX_DFL << 4) | G1_CORNER_INDEX_DBR
-};
-
 void g1_move_u(g1_state_t* state) {
     uint8_t swap = state->ul_ur_edges;
     state->ul_ur_edges = state->uf_ub_edges;
@@ -369,4 +287,84 @@ void g1_move_b(g1_state_t* state) {
 
     state->dfr_dbl_corners &= ~0b00001111;
     state->dfr_dbl_corners |= swap & 0b00001111;
+}
+
+void visual_cube_state_write_edge_g(visual_cube_state_t* visual_cube_state, visual_cube_edge_e edge, g1_edge_index_e piece, bool orientation) {
+    face_index_e primary_face_index   = (face_index_e)byte_ctz(edge);
+    face_index_e secondary_face_index = (face_index_e)byte_ctz((uint8_t)(edge ^ (1 << primary_face_index)));
+
+    int primary_sticker_index   = visual_cube_get_edge_sticker_index(primary_face_index, secondary_face_index);
+    int secondary_sticker_index = visual_cube_get_edge_sticker_index(secondary_face_index, primary_face_index);
+
+    static face_index_e g1_edge_faces_lookup[][2] = {
+        [G1_EDGE_INDEX_UF] = { FACE_INDEX_U, FACE_INDEX_F },
+        [G1_EDGE_INDEX_UB] = { FACE_INDEX_U, FACE_INDEX_B },
+        [G1_EDGE_INDEX_UL] = { FACE_INDEX_U, FACE_INDEX_L },
+        [G1_EDGE_INDEX_UR] = { FACE_INDEX_U, FACE_INDEX_R },
+        [G1_EDGE_INDEX_DF] = { FACE_INDEX_D, FACE_INDEX_F },
+        [G1_EDGE_INDEX_DB] = { FACE_INDEX_D, FACE_INDEX_B },
+        [G1_EDGE_INDEX_DL] = { FACE_INDEX_D, FACE_INDEX_L },
+        [G1_EDGE_INDEX_DR] = { FACE_INDEX_D, FACE_INDEX_R },
+        [G1_EDGE_INDEX_FL] = { FACE_INDEX_F, FACE_INDEX_L },
+        [G1_EDGE_INDEX_FR] = { FACE_INDEX_F, FACE_INDEX_R },
+        [G1_EDGE_INDEX_BL] = { FACE_INDEX_B, FACE_INDEX_L },
+        [G1_EDGE_INDEX_BR] = { FACE_INDEX_B, FACE_INDEX_R }
+    };
+
+    visual_cube_state->stickers[ primary_face_index ][ primary_sticker_index ] = g1_edge_faces_lookup[piece][orientation];
+    visual_cube_state->stickers[secondary_face_index][secondary_sticker_index] = g1_edge_faces_lookup[piece][orientation ^ 1];
+}
+
+void visual_cube_state_write_corner_g(visual_cube_state_t* visual_cube_state, visual_cube_corner_e corner, g1_corner_index_e piece, int orientation) {
+    assert(orientation >= 0 && orientation <= 2);
+
+    // The faces of each corner are ordered in a clockwise direction, and each array is extended by two
+    // to avoid having to take the modulus
+    static const face_index_e g1_corner_faces_lookup[][5] = {
+        [G1_CORNER_INDEX_UFR] = { FACE_INDEX_U, FACE_INDEX_R, FACE_INDEX_F, FACE_INDEX_U, FACE_INDEX_R },
+        [G1_CORNER_INDEX_UFL] = { FACE_INDEX_U, FACE_INDEX_F, FACE_INDEX_L, FACE_INDEX_U, FACE_INDEX_F },
+        [G1_CORNER_INDEX_UBR] = { FACE_INDEX_U, FACE_INDEX_B, FACE_INDEX_R, FACE_INDEX_U, FACE_INDEX_B },
+        [G1_CORNER_INDEX_UBL] = { FACE_INDEX_U, FACE_INDEX_L, FACE_INDEX_B, FACE_INDEX_U, FACE_INDEX_L },
+        [G1_CORNER_INDEX_DFR] = { FACE_INDEX_D, FACE_INDEX_F, FACE_INDEX_R, FACE_INDEX_D, FACE_INDEX_F },
+        [G1_CORNER_INDEX_DFL] = { FACE_INDEX_D, FACE_INDEX_L, FACE_INDEX_F, FACE_INDEX_D, FACE_INDEX_L },
+        [G1_CORNER_INDEX_DBR] = { FACE_INDEX_D, FACE_INDEX_R, FACE_INDEX_B, FACE_INDEX_D, FACE_INDEX_R },
+        [G1_CORNER_INDEX_DBL] = { FACE_INDEX_D, FACE_INDEX_B, FACE_INDEX_L, FACE_INDEX_D, FACE_INDEX_B }
+    };
+
+    face_index_e faces[3] = {};
+    memcpy(&faces, g1_corner_faces_lookup[piece] + orientation, sizeof faces);
+
+    // Depending on which corner we are attempting to set, we may need to swap two of the stickers due to the
+    // primary, secondary, and tertiary stickers not being ordered consistently in a clockwise or counterclockwise
+    // direction.
+    if ((byte_popcount(corner ^ VISUAL_CUBE_CORNER_UFL) & 2) == 2) {
+        face_index_e swap = faces[1];
+        faces[1] = faces[2];
+        faces[2] = swap;
+    }
+    visual_cube_state_write_corner(visual_cube_state, corner, faces[0], faces[1], faces[2]);
+}
+
+void g0_g1_state_write_visual_cube_state(visual_cube_state_t* visual_cube_state, g0_state_t g0_state, g1_state_t g1_state) {
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_UF, g1_state.uf_ub_edges >> 4,     (g0_state.ub_ur_uf_ul_edges >> 2) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_UB, g1_state.uf_ub_edges & 0b1111, (g0_state.ub_ur_uf_ul_edges >> 6) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_UL, g1_state.ul_ur_edges >> 4,     (g0_state.ub_ur_uf_ul_edges >> 0) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_UR, g1_state.ul_ur_edges & 0b1111, (g0_state.ub_ur_uf_ul_edges >> 4) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_DF, g1_state.df_db_edges >> 4,     (g0_state.df_dr_db_dl_edges >> 6) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_DB, g1_state.df_db_edges & 0b1111, (g0_state.df_dr_db_dl_edges >> 2) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_DL, g1_state.dl_dr_edges >> 4,     (g0_state.df_dr_db_dl_edges >> 0) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_DR, g1_state.dl_dr_edges & 0b1111, (g0_state.df_dr_db_dl_edges >> 4) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_FL, g1_state.fl_fr_edges >> 4,     (g0_state.bl_fr_br_fl_edges >> 0) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_FR, g1_state.fl_fr_edges & 0b1111, (g0_state.bl_fr_br_fl_edges >> 4) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_BL, g1_state.bl_br_edges >> 4,     (g0_state.bl_fr_br_fl_edges >> 6) & 1);
+    visual_cube_state_write_edge_g(visual_cube_state, VISUAL_CUBE_EDGE_BR, g1_state.bl_br_edges & 0b1111, (g0_state.bl_fr_br_fl_edges >> 2) & 1);
+
+    visual_cube_state_write_corner_g(visual_cube_state, VISUAL_CUBE_CORNER_UFR, g1_state.ufr_ubl_corners >> 4,     (g0_state.ufl_ufr_ubr_ubl_corners >> 8 ) & 0b11);
+    visual_cube_state_write_corner_g(visual_cube_state, VISUAL_CUBE_CORNER_UBL, g1_state.ufr_ubl_corners & 0b1111, (g0_state.ufl_ufr_ubr_ubl_corners >> 0 ) & 0b11);
+    visual_cube_state_write_corner_g(visual_cube_state, VISUAL_CUBE_CORNER_UFL, g1_state.ufl_ubr_corners >> 4,     (g0_state.ufl_ufr_ubr_ubl_corners >> 12) & 0b11);
+    visual_cube_state_write_corner_g(visual_cube_state, VISUAL_CUBE_CORNER_UBR, g1_state.ufl_ubr_corners & 0b1111, (g0_state.ufl_ufr_ubr_ubl_corners >> 4 ) & 0b11);
+    visual_cube_state_write_corner_g(visual_cube_state, VISUAL_CUBE_CORNER_DFR, g1_state.dfr_dbl_corners >> 4,     (g0_state.dfr_dfl_dbl_dbr_corners >> 12) & 0b11);
+    visual_cube_state_write_corner_g(visual_cube_state, VISUAL_CUBE_CORNER_DBL, g1_state.dfr_dbl_corners & 0b1111, (g0_state.dfr_dfl_dbl_dbr_corners >> 4 ) & 0b11);
+    visual_cube_state_write_corner_g(visual_cube_state, VISUAL_CUBE_CORNER_DFL, g1_state.dfl_dbr_corners >> 4,     (g0_state.dfr_dfl_dbl_dbr_corners >> 8 ) & 0b11);
+    visual_cube_state_write_corner_g(visual_cube_state, VISUAL_CUBE_CORNER_DBR, g1_state.dfl_dbr_corners & 0b1111, (g0_state.dfr_dfl_dbl_dbr_corners >> 0 ) & 0b11);
 }
