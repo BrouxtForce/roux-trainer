@@ -113,3 +113,30 @@ void draw_visual_cube_state(const visual_cube_state_t* visual_cube_state) {
         printf("\n");
     }
 }
+
+void get_visual_cube_state_string(const visual_cube_state_t* visual_cube_state, char buffer[55])
+{
+    int buffer_index = 0;
+
+    face_index_e face_order[6] = {
+        FACE_INDEX_U, FACE_INDEX_L, FACE_INDEX_F, FACE_INDEX_R, FACE_INDEX_B, FACE_INDEX_D
+    };
+    for (int i = 0; i < 6; i++) {
+        face_index_e face = face_order[i];
+
+        for (int sticker = 0; sticker < 9; sticker++) {
+            switch (visual_cube_state->stickers[face][sticker]) {
+                case FACE_INDEX_U: buffer[buffer_index++] = 'U'; break;
+                case FACE_INDEX_D: buffer[buffer_index++] = 'D'; break;
+                case FACE_INDEX_F: buffer[buffer_index++] = 'F'; break;
+                case FACE_INDEX_B: buffer[buffer_index++] = 'B'; break;
+                case FACE_INDEX_R: buffer[buffer_index++] = 'R'; break;
+                case FACE_INDEX_L: buffer[buffer_index++] = 'L'; break;
+                default: assert(false);
+            }
+        }
+    }
+
+    assert(buffer_index == 54);
+    buffer[buffer_index] = '\0';
+}

@@ -43,3 +43,5 @@ void visual_cube_state_write_corner(visual_cube_state_t* visual_cube_state, visu
                                     face_index_e primary_sticker, face_index_e secondary_sticker, face_index_e tertiary_sticker);
 
 void draw_visual_cube_state(const visual_cube_state_t* visual_cube_state);
+
+void get_visual_cube_state_string(const visual_cube_state_t* visual_cube_state, char buffer[55]);

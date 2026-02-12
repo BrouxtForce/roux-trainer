@@ -134,7 +134,16 @@ void draw_g0_g1_cube_state(g0_state_t g0_state, g1_state_t g1_state) {
     draw_visual_cube_state(&visual_cube_state);
 }
 
-int main() {
+// TODO: Put this in a header file
+void run_tests();
+
+int main(int argc, char** argv) {
+    // TODO: Proper command line argument parsing
+    if (argc >= 2 && strcmp(argv[1], "test") == 0) {
+        run_tests();
+        return 0;
+    }
+
     srand((unsigned)time(NULL));
 
     lse_state_t lse_state = SOLVED_LSE_STATE;
