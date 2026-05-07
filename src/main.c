@@ -156,7 +156,7 @@ int main(int argc, char** argv) {
     while (true) {
         printf(ESC_ERASE_ENTIRE_SCREEN);
         draw_lse_state(lse_state);
-        for (int i = 0; i < lse_move_list.size; i++) {
+        for (size_t i = 0; i < lse_move_list.size; i++) {
             if (i != 0) {
                 printf(" ");
             }
@@ -172,9 +172,9 @@ int main(int argc, char** argv) {
         printf("\n(%zu STM)\n", lse_move_list.size);
 
         printf("Solutions:\n");
-        for (int i = 0; i < lse_solution_list.size; i++) {
+        for (size_t i = 0; i < lse_solution_list.size; i++) {
             lse_move_list_t solution = lse_solution_list.data[i];
-            for (int j = 0; j < solution.size; j++) {
+            for (size_t j = 0; j < solution.size; j++) {
                 printf("%s ", lse_move_to_string(solution.data[j]));
             }
             printf("(%zu STM)\n", solution.size);

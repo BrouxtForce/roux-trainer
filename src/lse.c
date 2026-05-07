@@ -187,7 +187,7 @@ void lse_move_list_simplify_append(lse_move_list_t* list, lse_move_e move) {
 }
 
 void free_lse_solution_list(lse_solution_list_t* solution_list) {
-    for (int i = 0; i < solution_list->size; i++) {
+    for (size_t i = 0; i < solution_list->size; i++) {
         array_free(solution_list->data[i]);
     }
     array_free(*solution_list);
