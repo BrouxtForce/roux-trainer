@@ -149,8 +149,11 @@ void run_kociemba() {
         g1_execute_move(&g1_state, scramble.data[i]);
     }
 
-    g0_table_t g0_table = {};
-    g0_init_table(&g0_table);
+    g0_table_t* g0_table = malloc(sizeof(g0_table_t));
+    g0_init_table(g0_table);
+
+    g1_table_t* g1_table = malloc(sizeof(g1_table_t));
+    g1_init_table(g1_table);
 
     printf("Scramble: ");
     for (size_t i = 0; i < scramble.size; i++) {
@@ -160,16 +163,28 @@ void run_kociemba() {
 
     draw_g0_g1_cube_state(g0_state, g1_state);
 
-    solution_list_t solutions = solve_g0(&g0_table, g0_state);
-    printf("Solutions (%zu):\n", solutions.size);
-    for (size_t i = 0; i < solutions.size; i++) {
-        move_list_t move_list = solutions.data[i];
-        for (size_t i = 0; i < move_list.size; i++) {
-            move_e move = move_list.data[i];
-            printf("%s ", move_to_string(move));
-        }
-        printf("\n");
+    solution_list_t g0_solutions = solve_g0(g0_table, g0_state);
+
+    assert(g0_solutions.size > 0);
+    move_list_t g0_solution = g0_solutions.data[0];
+
+    for (size_t i = 0; i < g0_solution.size; i++) {
+        g1_execute_move(&g1_state, g0_solution.data[i]);
     }
+
+    solution_list_t g1_solutions = solve_g1(g1_table, g1_state);
+
+    assert(g1_solutions.size > 0);
+    move_list_t g1_solution = g1_solutions.data[0];
+
+    printf("Solution:\n");
+    for (size_t i = 0; i < g0_solution.size; i++) {
+        printf("%s ", move_to_string(g0_solution.data[i]));
+    }
+    for (size_t i = 0; i < g1_solution.size; i++) {
+        printf("%s ", move_to_string(g1_solution.data[i]));
+    }
+    printf("\n");
 }
 
 int main(int argc, char** argv) {

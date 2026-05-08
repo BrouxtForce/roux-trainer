@@ -148,13 +148,45 @@ void run_perf_tests() {
     int g0_solve_iterations = 10;
     for (int i = 0; i < g0_solve_iterations; i++) {
         timer_start(&timer);
-        solve_g0(&g0_table, g0_state);
+        solution_list_t solutions = solve_g0(&g0_table, g0_state);
         timer_stop(&timer);
         printf("G0 solve: %fs\n", timer_duration(timer));
         g0_solve_total_time += timer_duration(timer);
+
+        // Apply G0 solution to G1 state (only once)
+        if (i == 0) {
+            assert(solutions.size > 0);
+            move_list_t solution = solutions.data[0];
+            for (size_t j = 0; j < solution.size; j++) {
+                g1_execute_move(&g1_state, solution.data[j]);
+            }
+        }
+    }
+
+    g1_table_t* g1_table = malloc(sizeof(g1_table_t));
+    double g1_table_init_total_time = 0.0;
+    int g1_table_init_iterations = 10;
+    for (int i = 0; i < g1_table_init_iterations; i++) {
+        timer_start(&timer);
+        g1_init_table(g1_table);
+        timer_stop(&timer);
+        printf("G1 table initialization: %fs\n", timer_duration(timer));
+        g1_table_init_total_time += timer_duration(timer);
+    }
+
+    double g1_solve_total_time = 0.0;
+    int g1_solve_iterations = 10;
+    for (int i = 0; i < g1_solve_iterations; i++) {
+        timer_start(&timer);
+        solve_g1(g1_table, g1_state);
+        timer_stop(&timer);
+        printf("G1 solve: %fs\n", timer_duration(timer));
+        g1_solve_total_time += timer_duration(timer);
     }
 
     printf("--- PERFORMANCE ---\n");
     printf("G0 Table Init: %fs (average)\n", g0_table_init_total_time / g0_table_init_iterations);
     printf("G0 Solve:      %fs (average)\n", g0_solve_total_time / g0_solve_iterations);
+    printf("G1 Table Init: %fs (average)\n", g1_table_init_total_time / g1_table_init_iterations);
+    printf("G1 Solve:      %fs (average)\n", g1_solve_total_time / g1_solve_iterations);
 }
