@@ -2,6 +2,8 @@
 
 #include <assert.h>
 #include <string.h>
+#include <stdio.h>
+#include <math.h>
 #include "common.h"
 #include "visual_cube.h"
 
@@ -367,4 +369,309 @@ void g0_g1_state_write_visual_cube_state(visual_cube_state_t* visual_cube_state,
     visual_cube_state_write_corner_g(visual_cube_state, VISUAL_CUBE_CORNER_DBL, g1_state.dfr_dbl_corners & 0b1111, (g0_state.dfr_dfl_dbl_dbr_corners >> 4 ) & 0b11);
     visual_cube_state_write_corner_g(visual_cube_state, VISUAL_CUBE_CORNER_DFL, g1_state.dfl_dbr_corners >> 4,     (g0_state.dfr_dfl_dbl_dbr_corners >> 8 ) & 0b11);
     visual_cube_state_write_corner_g(visual_cube_state, VISUAL_CUBE_CORNER_DBR, g1_state.dfl_dbr_corners & 0b1111, (g0_state.dfr_dfl_dbl_dbr_corners >> 0 ) & 0b11);
+}
+
+static void _decompose_move(move_e move, move_e* base_move, int* count) {
+    *count     = move % 3;
+    *base_move = move - *count;
+    (*count)++;
+}
+
+void g0_execute_move(g0_state_t* g0_state, move_e move) {
+    move_e base_move;
+    int    count;
+    _decompose_move(move, &base_move, &count);
+
+    for (int i = 0; i < count; i++) {
+        switch (base_move) {
+            case MOVE_U: g0_move_u(g0_state); break;
+            case MOVE_D: g0_move_d(g0_state); break;
+            case MOVE_F: g0_move_f(g0_state); break;
+            case MOVE_B: g0_move_b(g0_state); break;
+            case MOVE_R: g0_move_r(g0_state); break;
+            case MOVE_L: g0_move_l(g0_state); break;
+            default:     assert(false);
+        }
+    }
+}
+
+void g1_execute_move(g1_state_t* g1_state, move_e move) {
+    move_e base_move;
+    int    count;
+    _decompose_move(move, &base_move, &count);
+
+    for (int i = 0; i < count; i++) {
+        switch (base_move) {
+            case MOVE_U: g1_move_u(g1_state); break;
+            case MOVE_D: g1_move_d(g1_state); break;
+            case MOVE_F: g1_move_f(g1_state); break;
+            case MOVE_B: g1_move_b(g1_state); break;
+            case MOVE_R: g1_move_r(g1_state); break;
+            case MOVE_L: g1_move_l(g1_state); break;
+            default:     assert(false);
+        }
+    }
+}
+
+static bool _g0_state_equals(g0_state_t left, g0_state_t right) {
+    assert(left._padding == 0 && right._padding == 0);
+    return memcmp(&left, &right, sizeof(g0_state_t)) == 0;
+}
+
+static int _g0_table_get_next_free(g0_table_t* g0_table) {
+    while (g0_table->next_free < G0_TABLE_SIZE) {
+        if (_g0_state_equals(g0_table->entries[g0_table->next_free].state, G0_STATE_NULL)) {
+            return g0_table->next_free;
+        }
+        g0_table->next_free++;
+    }
+    assert(false);
+}
+
+static int _g0_table_get_index(g0_state_t g0_state, uint64_t magic) {
+    assert(sizeof(uint64_t) == sizeof(g0_state_t));
+    assert(g0_state._padding == 0);
+
+    uint64_t num = *(uint64_t*)&g0_state;
+    return ((num * magic) >> 44) % G0_TABLE_SIZE;
+}
+
+static void _g0_table_insert(g0_table_t* g0_table, g0_state_t g0_state, int distance_from_solved) {
+    int index = _g0_table_get_index(g0_state, g0_table->magic);
+
+    g0_table_node_t* entry = &g0_table->entries[index];
+
+    // Case 1: The entry is empty
+    if (_g0_state_equals(entry->state, G0_STATE_NULL)) {
+        entry->state = g0_state;
+        entry->next_index = -1;
+        entry->distance_from_solved = distance_from_solved;
+
+        g0_table->count++;
+        return;
+    }
+
+    // Case 2: g0_state collides with an entry already present in the table
+    int entry_index = _g0_table_get_index(entry->state, g0_table->magic);
+    if (entry_index == index) {
+        while (true) {
+            if (_g0_state_equals(entry->state, g0_state)) {
+                if (entry->distance_from_solved > distance_from_solved) {
+                    entry->distance_from_solved = distance_from_solved;
+                }
+                return;
+            }
+            if (entry->next_index == -1) {
+                break;
+            }
+            entry = &g0_table->entries[entry->next_index];
+        }
+
+        int free_entry_index = _g0_table_get_next_free(g0_table);
+        entry->next_index = free_entry_index;
+
+        g0_table_node_t* free_entry = &g0_table->entries[free_entry_index];
+        free_entry->state = g0_state;
+        free_entry->next_index = -1;
+        free_entry->distance_from_solved = distance_from_solved;
+
+        g0_table->count++;
+        return;
+    }
+
+    // Case 3: The entry is filled with a linked list node that collided with another entry
+    g0_table_node_t* prev_entry = NULL;
+    g0_table_node_t* other_entry = &g0_table->entries[entry_index];
+    while (true) {
+        if (_g0_state_equals(other_entry->state, entry->state)) {
+            break;
+        }
+        if (other_entry->next_index == -1) {
+            assert(false);
+        }
+        prev_entry = other_entry;
+        other_entry = &g0_table->entries[other_entry->next_index];
+    }
+
+    if (prev_entry != NULL) {
+        prev_entry->next_index = other_entry->next_index;
+    }
+
+    g0_state_t missing_state = other_entry->state;
+
+    other_entry->state = g0_state;
+    other_entry->next_index = -1;
+    other_entry->distance_from_solved = distance_from_solved;
+
+    _g0_table_insert(g0_table, missing_state, distance_from_solved);
+}
+
+static int _g0_table_lookup(const g0_table_t* g0_table, g0_state_t g0_state) {
+    int index = _g0_table_get_index(g0_state, g0_table->magic);
+
+    const g0_table_node_t* entry = &g0_table->entries[index];
+    while (true) {
+        if (_g0_state_equals(entry->state, g0_state)) {
+            return entry->distance_from_solved;
+        }
+        if (entry->next_index == -1) {
+            break;
+        }
+        entry = &g0_table->entries[entry->next_index];
+    }
+
+    return -1;
+}
+
+void _recursive_g0_fill_table(g0_table_t* g0_table, g0_state_t g0_state, move_e prev_base_move, int depth, int distance_from_solved) {
+    _g0_table_insert(g0_table, g0_state, distance_from_solved);
+
+    if (depth <= 0) {
+        return;
+    }
+
+    g0_state_t original_state = g0_state;
+    for (int i = 0; i < 6; i++) {
+        move_e base_move = 3 * i;
+
+        if (prev_base_move == base_move) continue;
+        if (prev_base_move == MOVE_D && base_move == MOVE_U) continue;
+        if (prev_base_move == MOVE_B && base_move == MOVE_F) continue;
+        if (prev_base_move == MOVE_L && base_move == MOVE_R) continue;
+
+        g0_state = original_state;
+        for (int j = 0; j < 3; j++) {
+            switch (base_move) {
+                case MOVE_U: g0_move_u(&g0_state); break;
+                case MOVE_D: g0_move_d(&g0_state); break;
+                case MOVE_F: g0_move_f(&g0_state); break;
+                case MOVE_B: g0_move_b(&g0_state); break;
+                case MOVE_R: g0_move_r(&g0_state); break;
+                case MOVE_L: g0_move_l(&g0_state); break;
+                default:     assert(false);
+            }
+            _recursive_g0_fill_table(g0_table, g0_state, base_move, depth - 1, distance_from_solved + 1);
+        }
+    }
+}
+
+#define G0_MAGIC_ITERATIONS 10
+
+void g0_init_table(g0_table_t* g0_table) {
+    double   min_average_depth = INFINITY;
+    uint64_t best_magic_number = 0;
+
+    printf("Initializing G0 table\n");
+    for (int i = 0; i < G0_MAGIC_ITERATIONS; i++) {
+        memset(g0_table, 0, sizeof(*g0_table));
+        g0_table->magic = random_u64();
+        _recursive_g0_fill_table(g0_table, G0_STATE_SOLVED, MOVE_NULL, G0_TABLE_DEPTH, 0);
+
+        uint32_t max_depth    = 0;
+        uint32_t num_occupied = 0;
+        uint32_t num_roots    = 0;
+        uint32_t total_depth  = 0;
+
+        for (int i = 0; i < G0_TABLE_SIZE; i++) {
+            g0_table_node_t entry = g0_table->entries[i];
+
+            if (_g0_state_equals(entry.state, G0_STATE_NULL)) {
+                continue;
+            }
+
+            num_occupied++;
+
+            if (i != _g0_table_get_index(entry.state, g0_table->magic)) {
+                // This node is not a root node (it is the leaf of another entry in the table)
+                continue;
+            }
+            num_roots++;
+
+            uint32_t depth = 1;
+            while (entry.next_index != -1) {
+                entry = g0_table->entries[entry.next_index];
+                depth++;
+            }
+            total_depth += depth;
+
+            if (depth > max_depth) max_depth = depth;
+        }
+        assert(num_occupied == G0_TABLE_SIZE && num_occupied == g0_table->count);
+
+        double average_depth = (double)total_depth / num_roots;
+        if (average_depth < min_average_depth) {
+            min_average_depth = average_depth;
+            best_magic_number = g0_table->magic;
+            printf("(best) ");
+        }
+
+        printf("Iteration %i: max depth %i; average depth: %f\n", i, max_depth, (double)total_depth / num_roots);
+    }
+
+    memset(g0_table, 0, sizeof(*g0_table));
+    g0_table->magic = best_magic_number;
+    _recursive_g0_fill_table(g0_table, G0_STATE_SOLVED, MOVE_NULL, G0_TABLE_DEPTH, 0);
+
+    printf("Selected %llu (average depth: %f)\n", best_magic_number, min_average_depth);
+}
+
+bool g0_is_solved(g0_state_t g0_state) {
+    return memcmp(&g0_state, &G0_STATE_SOLVED, sizeof(g0_state_t)) == 0;
+}
+
+static void search_g0_helper(const g0_table_t* g0_table, g0_state_t g0_state, move_list_t* move_list, solution_list_t* solution_list, int depth) {
+    if (g0_is_solved(g0_state)) {
+        move_list_t copy_move_list;
+        array_copy(*move_list, copy_move_list);
+        array_append(*solution_list, copy_move_list);
+        return;
+    }
+
+    int distance_from_solved = _g0_table_lookup(g0_table, g0_state);
+    if (distance_from_solved == -1) {
+        // Best case scenario
+        distance_from_solved = G0_TABLE_DEPTH + 1;
+    }
+
+    if (depth <= 0 || depth < distance_from_solved) return;
+
+    g0_state_t original_state = g0_state;
+
+    for (int i = 0; i < 6; i++) {
+        move_e base_move = 3 * i;
+
+        g0_state = original_state;
+        for (int j = 0; j < 3; j++) {
+            array_append(*move_list, base_move + j);
+            switch (base_move) {
+                case MOVE_U: g0_move_u(&g0_state); break;
+                case MOVE_D: g0_move_d(&g0_state); break;
+                case MOVE_F: g0_move_f(&g0_state); break;
+                case MOVE_B: g0_move_b(&g0_state); break;
+                case MOVE_R: g0_move_r(&g0_state); break;
+                case MOVE_L: g0_move_l(&g0_state); break;
+                default:     assert(false);
+            }
+            search_g0_helper(g0_table, g0_state, move_list, solution_list, depth - 1);
+            array_pop(*move_list);
+        }
+    }
+}
+
+solution_list_t solve_g0(const g0_table_t* g0_table, g0_state_t g0_state) {
+    move_list_t move_list = {};
+    solution_list_t solution_list = {};
+
+    for (int depth = 1; depth <= 12; depth++) {
+        printf("[G0] Searching depth %i\n", depth);
+
+        assert(move_list.size == 0);
+        search_g0_helper(g0_table, g0_state, &move_list, &solution_list, depth);
+
+        if (solution_list.size > 0) {
+            break;
+        }
+    }
+
+    return solution_list;
 }

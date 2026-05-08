@@ -7,6 +7,7 @@ typedef struct {
     uint8_t ub_ur_uf_ul_edges;
     uint8_t df_dr_db_dl_edges;
     uint8_t bl_fr_br_fl_edges;
+    uint8_t _padding;
     uint16_t ufl_ufr_ubr_ubl_corners;
     uint16_t dfr_dfl_dbl_dbr_corners;
 } g0_state_t;
@@ -18,6 +19,8 @@ static const g0_state_t G0_STATE_SOLVED = {
     .ufl_ufr_ubr_ubl_corners = 0,
     .dfr_dfl_dbl_dbr_corners = 0
 };
+
+static const g0_state_t G0_STATE_NULL = {};
 
 void g0_move_u(g0_state_t* state);
 void g0_move_d(g0_state_t* state);
@@ -88,3 +91,28 @@ void g1_move_f(g1_state_t* state);
 void g1_move_b(g1_state_t* state);
 
 void g0_g1_state_write_visual_cube_state(visual_cube_state_t* visual_cube_state, g0_state_t g0_state, g1_state_t g1_state);
+
+void g0_execute_move(g0_state_t* g0_state, move_e move);
+void g1_execute_move(g1_state_t* g1_state, move_e move);
+
+#define G0_TABLE_SIZE  95039
+#define G0_TABLE_DEPTH 5
+
+typedef struct g0_table_node_t {
+    g0_state_t state;
+    int next_index;
+    int distance_from_solved;
+} g0_table_node_t;
+
+typedef struct {
+    g0_table_node_t entries[G0_TABLE_SIZE];
+    uint32_t count;
+    uint32_t next_free;
+    uint64_t magic;
+} g0_table_t;
+
+void g0_init_table(g0_table_t* g0_table);
+
+bool g0_is_solved(g0_state_t g0_state);
+
+solution_list_t solve_g0(const g0_table_t* g0_table, g0_state_t g0_state);

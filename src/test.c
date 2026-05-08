@@ -5,16 +5,6 @@
 #include "visual_cube.h"
 #include "kociemba.h"
 
-typedef enum {
-    MOVE_NULL,
-    MOVE_U, MOVE_U2, MOVE_U_PRIME,
-    MOVE_D, MOVE_D2, MOVE_D_PRIME,
-    MOVE_F, MOVE_F2, MOVE_F_PRIME,
-    MOVE_B, MOVE_B2, MOVE_B_PRIME,
-    MOVE_R, MOVE_R2, MOVE_R_PRIME,
-    MOVE_L, MOVE_L2, MOVE_L_PRIME
-} move_e;
-
 move_e consume_next_move(const char** alg_string) {
     while (true) {
         char next_char = (*alg_string)[0];
@@ -52,49 +42,6 @@ move_e consume_next_move(const char** alg_string) {
     assert(false);
 }
 
-void g0_g1_state_execute_move(g0_state_t* g0_state, g1_state_t* g1_state, move_e move) {
-    switch (move) {
-        case MOVE_U: case MOVE_U2: case MOVE_U_PRIME:
-            for (int i = 0; i <= (int)move - MOVE_U; i++) {
-                g0_move_u(g0_state);
-                g1_move_u(g1_state);
-            }
-            break;
-        case MOVE_D: case MOVE_D2: case MOVE_D_PRIME:
-            for (int i = 0; i <= (int)move - MOVE_D; i++) {
-                g0_move_d(g0_state);
-                g1_move_d(g1_state);
-            }
-            break;
-        case MOVE_F: case MOVE_F2: case MOVE_F_PRIME:
-            for (int i = 0; i <= (int)move - MOVE_F; i++) {
-                g0_move_f(g0_state);
-                g1_move_f(g1_state);
-            }
-            break;
-        case MOVE_B: case MOVE_B2: case MOVE_B_PRIME:
-            for (int i = 0; i <= (int)move - MOVE_B; i++) {
-                g0_move_b(g0_state);
-                g1_move_b(g1_state);
-            }
-            break;
-        case MOVE_R: case MOVE_R2: case MOVE_R_PRIME:
-            for (int i = 0; i <= (int)move - MOVE_R; i++) {
-                g0_move_r(g0_state);
-                g1_move_r(g1_state);
-            }
-            break;
-        case MOVE_L: case MOVE_L2: case MOVE_L_PRIME:
-            for (int i = 0; i <= (int)move - MOVE_L; i++) {
-                g0_move_l(g0_state);
-                g1_move_l(g1_state);
-            }
-            break;
-        default:
-            assert(false);
-    }
-}
-
 bool g0_g1_test_alg(const char* alg_string, const char* expected_state) {
     g0_state_t g0_state = G0_STATE_SOLVED;
     g1_state_t g1_state = G1_STATE_SOLVED;
@@ -105,7 +52,8 @@ bool g0_g1_test_alg(const char* alg_string, const char* expected_state) {
             break;
         }
 
-        g0_g1_state_execute_move(&g0_state, &g1_state, move);
+        g0_execute_move(&g0_state, move);
+        g1_execute_move(&g1_state, move);
     }
 
     visual_cube_state_t visual_cube_state;

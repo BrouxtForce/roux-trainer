@@ -38,6 +38,7 @@ void restore_initial_mode() {
     }
 }
 
+// NOTE: This function will replace the first whitespace in the string with a null terminator
 void clear_trailing_whitespace(char* str) {
     for (int i = 0; str[i] != '\0'; i++) {
         if (isspace(str[i])) {
@@ -137,14 +138,51 @@ void draw_g0_g1_cube_state(g0_state_t g0_state, g1_state_t g1_state) {
 // TODO: Put this in a header file
 void run_tests();
 
+void run_kociemba() {
+    g0_state_t g0_state = G0_STATE_SOLVED;
+    g1_state_t g1_state = G1_STATE_SOLVED;
+
+    move_list_t scramble = generate_random_move_scramble(20);
+    for (size_t i = 0; i < scramble.size; i++) {
+        g0_execute_move(&g0_state, scramble.data[i]);
+        g1_execute_move(&g1_state, scramble.data[i]);
+    }
+
+    g0_table_t g0_table = {};
+    g0_init_table(&g0_table);
+
+    printf("Scramble: ");
+    for (size_t i = 0; i < scramble.size; i++) {
+        printf("%s ", move_to_string(scramble.data[i]));
+    }
+    printf("\n");
+
+    draw_g0_g1_cube_state(g0_state, g1_state);
+
+    solution_list_t solutions = solve_g0(&g0_table, g0_state);
+    printf("Solutions (%zu):\n", solutions.size);
+    for (size_t i = 0; i < solutions.size; i++) {
+        move_list_t move_list = solutions.data[i];
+        for (size_t i = 0; i < move_list.size; i++) {
+            move_e move = move_list.data[i];
+            printf("%s ", move_to_string(move));
+        }
+        printf("\n");
+    }
+}
+
 int main(int argc, char** argv) {
+    srand((unsigned)time(NULL));
+
     // TODO: Proper command line argument parsing
     if (argc >= 2 && strcmp(argv[1], "test") == 0) {
         run_tests();
         return 0;
     }
-
-    srand((unsigned)time(NULL));
+    if (argc >= 2 && strcmp(argv[1], "kociemba") == 0) {
+        run_kociemba();
+        return 0;
+    }
 
     lse_state_t lse_state = SOLVED_LSE_STATE;
     lse_move_list_t lse_move_list = {};
@@ -155,6 +193,7 @@ int main(int argc, char** argv) {
     enter_raw_mode();
     while (true) {
         printf(ESC_ERASE_ENTIRE_SCREEN);
+
         draw_lse_state(lse_state);
         for (size_t i = 0; i < lse_move_list.size; i++) {
             if (i != 0) {
