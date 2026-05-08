@@ -98,7 +98,7 @@ void g1_execute_move(g1_state_t* g1_state, move_e move);
 #define G0_TABLE_SIZE  95039
 #define G0_TABLE_DEPTH 5
 
-typedef struct g0_table_node_t {
+typedef struct {
     g0_state_t state;
     int next_index;
     int distance_from_solved;

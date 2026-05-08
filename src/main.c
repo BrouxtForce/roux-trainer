@@ -137,6 +137,7 @@ void draw_g0_g1_cube_state(g0_state_t g0_state, g1_state_t g1_state) {
 
 // TODO: Put this in a header file
 void run_tests();
+void run_perf_tests();
 
 void run_kociemba() {
     g0_state_t g0_state = G0_STATE_SOLVED;
@@ -177,6 +178,10 @@ int main(int argc, char** argv) {
     // TODO: Proper command line argument parsing
     if (argc >= 2 && strcmp(argv[1], "test") == 0) {
         run_tests();
+        return 0;
+    }
+    if (argc >= 2 && strcmp(argv[1], "perf") == 0) {
+        run_perf_tests();
         return 0;
     }
     if (argc >= 2 && strcmp(argv[1], "kociemba") == 0) {

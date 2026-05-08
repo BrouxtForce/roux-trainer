@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <time.h>
 
 #include "visual_cube.h"
 #include "kociemba.h"
@@ -42,19 +43,22 @@ move_e consume_next_move(const char** alg_string) {
     assert(false);
 }
 
-bool g0_g1_test_alg(const char* alg_string, const char* expected_state) {
-    g0_state_t g0_state = G0_STATE_SOLVED;
-    g1_state_t g1_state = G1_STATE_SOLVED;
-
+void g0_g1_execute_alg_string(g0_state_t* g0_state, g1_state_t* g1_state, const char* alg_string) {
     while (true) {
         move_e move = consume_next_move(&alg_string);
         if (move == MOVE_NULL) {
             break;
         }
 
-        g0_execute_move(&g0_state, move);
-        g1_execute_move(&g1_state, move);
+        g0_execute_move(g0_state, move);
+        g1_execute_move(g1_state, move);
     }
+}
+
+bool g0_g1_test_alg(const char* alg_string, const char* expected_state) {
+    g0_state_t g0_state = G0_STATE_SOLVED;
+    g1_state_t g1_state = G1_STATE_SOLVED;
+    g0_g1_execute_alg_string(&g0_state, &g1_state, alg_string);
 
     visual_cube_state_t visual_cube_state;
     visual_cube_state_reset(&visual_cube_state);
@@ -99,4 +103,58 @@ void run_tests() {
     if (all_tests_succeeded) {
         printf("All tests succeeded!\n");
     }
+}
+
+typedef struct {
+    clock_t start;
+    clock_t end;
+} timer_t;
+
+void timer_start(timer_t* timer) {
+    timer->start = clock();
+}
+
+void timer_stop(timer_t* timer) {
+    timer->end = clock();
+}
+
+double timer_duration(timer_t timer) {
+    return (double)(timer.end - timer.start) / CLOCKS_PER_SEC;
+}
+
+void run_perf_tests() {
+    srand(42);
+
+    const char* superflip = "U R2 F B R B2 R U2 L B2 R U' D' R2 F R' L B2 U2 F2";
+
+    g0_state_t g0_state = G0_STATE_SOLVED;
+    g1_state_t g1_state = G1_STATE_SOLVED;
+    g0_g1_execute_alg_string(&g0_state, &g1_state, superflip);
+
+    timer_t timer;
+
+    g0_table_t g0_table;
+    double g0_table_init_total_time = 0.0;
+    int g0_table_init_iterations = 10;
+    for (int i = 0; i < g0_table_init_iterations; i++) {
+        timer_start(&timer);
+        g0_init_table(&g0_table);
+        timer_stop(&timer);
+        printf("G0 table initialization: %fs\n", timer_duration(timer));
+        g0_table_init_total_time += timer_duration(timer);
+    }
+
+    double g0_solve_total_time = 0.0;
+    int g0_solve_iterations = 10;
+    for (int i = 0; i < g0_solve_iterations; i++) {
+        timer_start(&timer);
+        solve_g0(&g0_table, g0_state);
+        timer_stop(&timer);
+        printf("G0 solve: %fs\n", timer_duration(timer));
+        g0_solve_total_time += timer_duration(timer);
+    }
+
+    printf("--- PERFORMANCE ---\n");
+    printf("G0 Table Init: %fs (average)\n", g0_table_init_total_time / g0_table_init_iterations);
+    printf("G0 Solve:      %fs (average)\n", g0_solve_total_time / g0_solve_iterations);
 }
