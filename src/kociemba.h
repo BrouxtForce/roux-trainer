@@ -121,7 +121,7 @@ void g0_init_table(g0_table_t* g0_table);
 
 bool g0_is_solved(g0_state_t g0_state);
 
-solution_list_t solve_g0(const g0_table_t* g0_table, g0_state_t g0_state);
+solution_list_t solve_g0(const g0_table_t* g0_table, g0_state_t g0_state, allocator_e);
 
 #define G1_TABLE_SIZE 883485
 #define G1_TABLE_DEPTH 7
@@ -143,6 +143,6 @@ void g1_init_table(g1_table_t* g1_table);
 
 bool g1_is_solved(g1_state_t g1_state);
 
-solution_list_t solve_g1(g1_table_t* g1_table, g1_state_t g1_state);
+solution_list_t solve_g1(g1_table_t* g1_table, g1_state_t g1_state, allocator_e allocator);
 
-move_list_t solve_g0_g1(g0_table_t* g0_table, g1_table_t* g1_table, g0_state_t g0_state, g1_state_t g1_state);
+move_list_t solve_g0_g1(g0_table_t* g0_table, g1_table_t* g1_table, g0_state_t g0_state, g1_state_t g1_state, allocator_e allocator);

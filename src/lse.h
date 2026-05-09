@@ -60,6 +60,7 @@ typedef struct {
     lse_move_e* data;
     size_t size;
     size_t capacity;
+    allocator_e allocator;
 } lse_move_list_t;
 
 void lse_move_list_simplify_append(lse_move_list_t* list, lse_move_e move);
@@ -68,11 +69,12 @@ typedef struct {
     lse_move_list_t* data;
     size_t size;
     size_t capacity;
+    allocator_e allocator;
 } lse_solution_list_t;
 
 void free_lse_solution_list(lse_solution_list_t* solution_list);
 
-lse_solution_list_t solve_eolr(lse_state_t lse_state);
-lse_solution_list_t solve_lse(lse_state_t lse_state);
+lse_solution_list_t solve_eolr(lse_state_t lse_state, allocator_e allocator);
+lse_solution_list_t solve_lse(lse_state_t lse_state, allocator_e allocator);
 
 void lse_state_write_visual_cube_state(lse_state_t lse_state, visual_cube_state_t* visual_cube_state);

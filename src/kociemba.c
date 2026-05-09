@@ -633,7 +633,7 @@ bool g0_is_solved(g0_state_t g0_state) {
 
 static void _search_g0_helper(const g0_table_t* g0_table, g0_state_t g0_state, move_list_t* move_list, solution_list_t* solution_list, int depth) {
     if (g0_is_solved(g0_state)) {
-        move_list_t copy_move_list;
+        move_list_t copy_move_list = { .allocator = solution_list->allocator };
         array_copy(*move_list, copy_move_list);
         array_append(*solution_list, copy_move_list);
         return;
@@ -674,9 +674,9 @@ static void _search_g0_helper(const g0_table_t* g0_table, g0_state_t g0_state, m
     }
 }
 
-solution_list_t solve_g0(const g0_table_t* g0_table, g0_state_t g0_state) {
-    move_list_t move_list = {};
-    solution_list_t solution_list = {};
+solution_list_t solve_g0(const g0_table_t* g0_table, g0_state_t g0_state, allocator_e allocator) {
+    move_list_t move_list = { .allocator = TEMP_ALLOCATOR };
+    solution_list_t solution_list = { .allocator = allocator };
 
     for (int depth = 1; depth <= 12; depth++) {
         printf("[G0] Searching depth %i\n", depth);
@@ -910,7 +910,7 @@ bool g1_is_solved(g1_state_t g1_state) {
 
 static void _search_g1_helper(g1_table_t* g1_table, g1_state_t g1_state, move_list_t* move_list, solution_list_t* solution_list, int depth) {
     if (g1_is_solved(g1_state)) {
-        move_list_t copy_move_list;
+        move_list_t copy_move_list = { .allocator = solution_list->allocator };
         array_copy(*move_list, copy_move_list);
         array_append(*solution_list, copy_move_list);
         return;
@@ -966,27 +966,25 @@ static void _search_g1_helper(g1_table_t* g1_table, g1_state_t g1_state, move_li
     }
 }
 
-static solution_list_t _solve_g1_at_depth(g1_table_t* g1_table, g1_state_t g1_state, int depth) {
-    solution_list_t solution_list = {};
-    move_list_t move_list = {};
+static solution_list_t _solve_g1_at_depth(g1_table_t* g1_table, g1_state_t g1_state, int depth, allocator_e allocator) {
+    solution_list_t solution_list = { .allocator = allocator };
+    move_list_t move_list = { .allocator = TEMP_ALLOCATOR };
 
     _search_g1_helper(g1_table, g1_state, &move_list, &solution_list, depth);
-
-    array_free(move_list);
 
     return solution_list;
 }
 
-solution_list_t solve_g1(g1_table_t* g1_table, g1_state_t g1_state) {
+solution_list_t solve_g1(g1_table_t* g1_table, g1_state_t g1_state, allocator_e allocator) {
     if (g1_is_solved(g1_state)) {
-        solution_list_t out = {};
+        solution_list_t out = { .allocator = allocator };
         array_append(out, (move_list_t){});
         return out;
     }
 
     for (int depth = 1; depth <= 18; depth++) {
         printf("[G1] Searching depth %i\n", depth);
-        solution_list_t solutions = _solve_g1_at_depth(g1_table, g1_state, depth);
+        solution_list_t solutions = _solve_g1_at_depth(g1_table, g1_state, depth, allocator);
         if (solutions.size > 0) {
             return solutions;
         }
@@ -995,13 +993,13 @@ solution_list_t solve_g1(g1_table_t* g1_table, g1_state_t g1_state) {
     assert(false);
 }
 
-move_list_t solve_g0_g1(g0_table_t* g0_table, g1_table_t* g1_table, g0_state_t g0_state, g1_state_t g1_state) {
+move_list_t solve_g0_g1(g0_table_t* g0_table, g1_table_t* g1_table, g0_state_t g0_state, g1_state_t g1_state, allocator_e allocator) {
     // TODO: Search suboptimal G0 solutions
-    solution_list_t g0_solutions = solve_g0(g0_table, g0_state);
+    solution_list_t g0_solutions = solve_g0(g0_table, g0_state, TEMP_ALLOCATOR);
     assert(g0_solutions.size > 0);
 
-    move_list_t best_g0_solution = {};
-    move_list_t best_g1_solution = {};
+    move_list_t best_g0_solution = { .allocator = TEMP_ALLOCATOR };
+    move_list_t best_g1_solution = { .allocator = TEMP_ALLOCATOR };
 
     bool found_solution = false;
     for (int depth = 1; depth <= 18; depth++) {
@@ -1013,7 +1011,7 @@ move_list_t solve_g0_g1(g0_table_t* g0_table, g1_table_t* g1_table, g0_state_t g
                 g1_execute_move(&new_state, g0_solution.data[j]);
             }
 
-            solution_list_t g1_solutions = _solve_g1_at_depth(g1_table, new_state, depth);
+            solution_list_t g1_solutions = _solve_g1_at_depth(g1_table, new_state, depth, TEMP_ALLOCATOR);
             if (g1_solutions.size > 0) {
                 best_g0_solution = g0_solution;
                 best_g1_solution = g1_solutions.data[0];
@@ -1024,7 +1022,7 @@ move_list_t solve_g0_g1(g0_table_t* g0_table, g1_table_t* g1_table, g0_state_t g
         if (found_solution) break;
     }
 
-    move_list_t solution = {};
+    move_list_t solution = { .allocator = allocator };
     array_reserve(solution, best_g0_solution.size + best_g1_solution.size);
 
     memcpy(solution.data, best_g0_solution.data, best_g0_solution.size * sizeof(move_e));

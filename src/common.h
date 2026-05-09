@@ -5,13 +5,23 @@
 #include <stdlib.h>
 #include <assert.h>
 
+typedef struct {
+    const char* file;
+    int line;
+} source_location_t;
+
+#define SOURCE_LOCATION (source_location_t){ .file = __FILE__, .line = __LINE__ }
+
 #define array_reserve(array, amount) \
     do { \
         if ((amount) > (array).capacity) { \
+            size_t old_capacity = (array).capacity; \
             (array).capacity *= 2; \
             if ((array).capacity < 8)      (array).capacity = 8; \
             if ((array).capacity < amount) (array).capacity = (amount); \
-            (array).data = realloc((array).data, (array).capacity * sizeof *(array).data); \
+            (array).data = resize_alloc( \
+                old_capacity * sizeof *(array).data, (array).data, (array).capacity * sizeof *(array).data, \
+                (array).allocator, SOURCE_LOCATION); \
         } \
     } while (false)
 
@@ -29,7 +39,7 @@
 
 #define array_copy(src_array, copy_array) \
     do { \
-        (copy_array).data = malloc((src_array).size); \
+        (copy_array).data = alloc((src_array).size, (copy_array).allocator, SOURCE_LOCATION); \
         (copy_array).size = (src_array).size; \
         (copy_array).capacity = (src_array).capacity; \
         memcpy((copy_array).data, (src_array).data, (src_array).size * sizeof *(copy_array).data); \
@@ -37,7 +47,7 @@
 
 #define array_free(array) \
     do { \
-        free((array).data); \
+        free_alloc((array).data, (array).allocator); \
         (array).data = NULL; \
         (array).size = 0; \
         (array).capacity = 0; \
@@ -71,7 +81,30 @@ static inline uint16_t rotate_right_u16(uint16_t value, uint16_t amount) {
     return __builtin_rotateright16(value, amount);
 }
 
+typedef enum {
+    INVALID_ALLOCATOR,
+
+    // Standard general-purpose allocator that is just a wrapper for malloc()
+    MAIN_ALLOCATOR,
+
+    // Arena allocator for temporary allocations
+    TEMP_ALLOCATOR,
+
+    // The allocator used internally by the custom alloc() functions
+    INTERNAL_ALLOCATOR
+} allocator_e;
+
+void* alloc(size_t size, allocator_e allocator, source_location_t caller_location);
+void* resize_alloc(size_t old_size, void* data, size_t size, allocator_e allocator, source_location_t caller_location);
+
+void free_alloc(void* ptr, allocator_e allocator);
+void temp_allocator_free_all();
+
 uint64_t random_u64();
+
+inline static uint64_t max_u64(uint64_t a, uint64_t b) {
+    return a > b ? a : b;
+}
 
 typedef enum : uint8_t {
     FACE_INDEX_U,
@@ -98,12 +131,14 @@ typedef struct {
     move_e* data;
     size_t size;
     size_t capacity;
+    allocator_e allocator;
 } move_list_t;
 
-move_list_t generate_random_move_scramble(int length);
+move_list_t generate_random_move_scramble(int length, allocator_e allocator);
 
 typedef struct {
     move_list_t* data;
     size_t size;
     size_t capacity;
+    allocator_e allocator;
 } solution_list_t;

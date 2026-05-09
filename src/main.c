@@ -52,9 +52,10 @@ typedef struct {
     lse_state_t* data;
     size_t size;
     size_t capacity;
+    allocator_e allocator;
 } lse_state_list_t;
 
-static lse_state_list_t prev_lse_states = {};
+static lse_state_list_t prev_lse_states = { .allocator = MAIN_ALLOCATOR };
 
 void execute_command_scramble(lse_state_t* lse_state, lse_move_list_t* lse_move_list, lse_solution_list_t* lse_solution_list) {
     *lse_state = generate_random_lse_state();
@@ -106,11 +107,11 @@ void read_and_execute_command(lse_state_t* lse_state, lse_move_list_t* lse_move_
         }
         if (strcmp(command, "eolr") == 0) {
             free_lse_solution_list(lse_solution_list);
-            *lse_solution_list = solve_eolr(*lse_state);
+            *lse_solution_list = solve_eolr(*lse_state, MAIN_ALLOCATOR);
         }
         if (strcmp(command, "lse") == 0) {
             free_lse_solution_list(lse_solution_list);
-            *lse_solution_list = solve_lse(*lse_state);
+            *lse_solution_list = solve_lse(*lse_state, MAIN_ALLOCATOR);
         }
     }
 
@@ -143,16 +144,16 @@ void run_kociemba() {
     g0_state_t g0_state = G0_STATE_SOLVED;
     g1_state_t g1_state = G1_STATE_SOLVED;
 
-    move_list_t scramble = generate_random_move_scramble(20);
+    move_list_t scramble = generate_random_move_scramble(20, TEMP_ALLOCATOR);
     for (size_t i = 0; i < scramble.size; i++) {
         g0_execute_move(&g0_state, scramble.data[i]);
         g1_execute_move(&g1_state, scramble.data[i]);
     }
 
-    g0_table_t* g0_table = malloc(sizeof(g0_table_t));
+    g0_table_t* g0_table = alloc(sizeof(g0_table_t), MAIN_ALLOCATOR, SOURCE_LOCATION);
     g0_init_table(g0_table);
 
-    g1_table_t* g1_table = malloc(sizeof(g1_table_t));
+    g1_table_t* g1_table = alloc(sizeof(g1_table_t), MAIN_ALLOCATOR, SOURCE_LOCATION);
     g1_init_table(g1_table);
 
     printf("Scramble: ");
@@ -163,12 +164,15 @@ void run_kociemba() {
 
     draw_g0_g1_cube_state(g0_state, g1_state);
 
-    move_list_t solution = solve_g0_g1(g0_table, g1_table, g0_state, g1_state);
+    move_list_t solution = solve_g0_g1(g0_table, g1_table, g0_state, g1_state, TEMP_ALLOCATOR);
     printf("Solution (%zu HTM): ", solution.size);
     for (size_t i = 0; i < solution.size; i++) {
         printf("%s ", move_to_string(solution.data[i]));
     }
     printf("\n");
+
+    free_alloc(g0_table, MAIN_ALLOCATOR);
+    free_alloc(g1_table, MAIN_ALLOCATOR);
 }
 
 int main(int argc, char** argv) {
@@ -189,8 +193,8 @@ int main(int argc, char** argv) {
     }
 
     lse_state_t lse_state = SOLVED_LSE_STATE;
-    lse_move_list_t lse_move_list = {};
-    lse_solution_list_t lse_solution_list = {};
+    lse_move_list_t lse_move_list = { .allocator = MAIN_ALLOCATOR };
+    lse_solution_list_t lse_solution_list = { .allocator = MAIN_ALLOCATOR };
 
     printf(ESC_SAVE_SCREEN);
 
@@ -224,6 +228,7 @@ int main(int argc, char** argv) {
         }
 
         handle_input:
+        temp_allocator_free_all();
         switch (getchar()) {
             case 'm':
                 lse_state = lse_move_m(lse_state);

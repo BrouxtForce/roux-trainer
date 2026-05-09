@@ -197,7 +197,7 @@ void _solve_eolr_recursive_m(lse_state_t lse_state, lse_move_list_t* moves, lse_
 
 void _solve_eolr_recursive_u(lse_state_t lse_state, lse_move_list_t* moves, lse_solution_list_t* solutions, int depth) {
     if (was_eolr_just_solved(lse_state)) {
-        lse_move_list_t solution = {};
+        lse_move_list_t solution = { .allocator = solutions->allocator };
         array_copy(*moves, solution);
         array_append(*solutions, solution);
         return;
@@ -220,7 +220,7 @@ void _solve_eolr_recursive_u(lse_state_t lse_state, lse_move_list_t* moves, lse_
 
 void _solve_eolr_recursive_m(lse_state_t lse_state, lse_move_list_t* moves, lse_solution_list_t* solutions, int depth) {
     if (was_eolr_just_solved(lse_state)) {
-        lse_move_list_t solution = {};
+        lse_move_list_t solution = { .allocator = solutions->allocator };
         array_copy(*moves, solution);
         array_append(*solutions, solution);
         return;
@@ -241,10 +241,10 @@ void _solve_eolr_recursive_m(lse_state_t lse_state, lse_move_list_t* moves, lse_
     moves->size--;
 }
 
-lse_solution_list_t solve_eolr(lse_state_t lse_state) {
-    lse_move_list_t moves = {};
+lse_solution_list_t solve_eolr(lse_state_t lse_state, allocator_e allocator) {
+    lse_move_list_t moves = { .allocator = TEMP_ALLOCATOR };
 
-    lse_solution_list_t solutions = {};
+    lse_solution_list_t solutions = { .allocator = allocator };
     // TODO: Maximum number of moves to solve EOLR
     for (int depth = 0; depth <= 18 && solutions.size == 0; depth++) {
         printf("Searching depth %i\n", depth);
@@ -260,7 +260,7 @@ void _solve_lse_recursive_m(lse_state_t lse_state, lse_move_list_t* moves, lse_s
 
 void _solve_lse_recursive_u(lse_state_t lse_state, lse_move_list_t* moves, lse_solution_list_t* solutions, int depth) {
     if (is_lse_solved(lse_state)) {
-        lse_move_list_t solution = {};
+        lse_move_list_t solution = { .allocator = solutions->allocator };
         array_copy(*moves, solution);
         array_append(*solutions, solution);
         return;
@@ -283,7 +283,7 @@ void _solve_lse_recursive_u(lse_state_t lse_state, lse_move_list_t* moves, lse_s
 
 void _solve_lse_recursive_m(lse_state_t lse_state, lse_move_list_t* moves, lse_solution_list_t* solutions, int depth) {
     if (is_lse_solved(lse_state)) {
-        lse_move_list_t solution = {};
+        lse_move_list_t solution = { .allocator = solutions->allocator };
         array_copy(*moves, solution);
         array_append(*solutions, solution);
         return;
@@ -304,10 +304,10 @@ void _solve_lse_recursive_m(lse_state_t lse_state, lse_move_list_t* moves, lse_s
     moves->size--;
 }
 
-lse_solution_list_t solve_lse(lse_state_t lse_state) {
-    lse_move_list_t moves = {};
+lse_solution_list_t solve_lse(lse_state_t lse_state, allocator_e allocator) {
+    lse_move_list_t moves = { .allocator = TEMP_ALLOCATOR };
 
-    lse_solution_list_t solutions = {};
+    lse_solution_list_t solutions = { .allocator = allocator };
     // TODO: Maximum number of moves to solve LSE
     for (int depth = 0; depth <= 18 && solutions.size == 0; depth++) {
         printf("Searching depth %i\n", depth);

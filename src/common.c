@@ -1,4 +1,233 @@
 #include "common.h"
+#include <stdio.h>
+#include <string.h>
+
+// TODO: Revisit and tune this to the actual temporary memory usage of the program
+#define MIN_ALLOCATION_BLOCK_SIZE (1 << 20)
+
+typedef struct {
+    void* data;
+    size_t size;
+    size_t offset;
+} allocation_block_t;
+
+typedef struct {
+    allocation_block_t* data;
+    size_t size;
+    size_t capacity;
+    allocator_e allocator;
+} allocation_block_list_t;
+
+static allocation_block_list_t temp_allocation_block_list = { .allocator = INTERNAL_ALLOCATOR };
+
+static allocation_block_t* temp_alloc_append_block(size_t size) {
+    array_append(temp_allocation_block_list, (allocation_block_t){});
+
+    allocation_block_t* block = &temp_allocation_block_list.data[temp_allocation_block_list.size - 1];
+
+    block->size   = max_u64(size, MIN_ALLOCATION_BLOCK_SIZE);
+    block->data   = malloc(block->size);
+    block->offset = 0;
+
+    return block;
+}
+
+static void* temp_alloc_from_block(allocation_block_t* allocation_block, size_t size) {
+    if (size > allocation_block->size - allocation_block->offset) {
+        return NULL;
+    }
+
+    void* out = (uint8_t*)allocation_block->data + allocation_block->offset;
+    allocation_block->offset += size;
+    return out;
+}
+
+static void* temp_alloc(size_t size) {
+    for (size_t i = 0; i < temp_allocation_block_list.size; i++) {
+        allocation_block_t* block = &temp_allocation_block_list.data[i];
+        void* ptr = temp_alloc_from_block(block, size);
+        if (ptr != NULL) {
+            return ptr;
+        }
+    }
+
+    allocation_block_t* block = temp_alloc_append_block(size);
+    void* ptr = temp_alloc_from_block(block, size);
+    assert(ptr != NULL);
+    return ptr;
+}
+
+static bool is_pointer_in_block(void* ptr, allocation_block_t* block) {
+    return ptr >= block->data && (uint8_t*)ptr < (uint8_t*)block->data + block->size;
+}
+
+static void* temp_realloc(size_t old_size, void* data, size_t size) {
+    if (old_size == 0 || data == NULL) {
+        assert(old_size == 0 && data == NULL);
+        return temp_alloc(size);
+    }
+
+    // Attempt to reallocate in place
+    for (size_t i = 0; i < temp_allocation_block_list.size; i++) {
+        allocation_block_t* block = &temp_allocation_block_list.data[i];
+        if (!is_pointer_in_block(data, block)) {
+            continue;
+        }
+        if ((uint8_t*)data + old_size != (uint8_t*)block->data + block->offset) {
+            break;
+        }
+        assert(block->offset >= old_size);
+        block->offset -= old_size;
+        return temp_alloc_from_block(block, size);
+    }
+
+    // The allocation needs to be relocated
+    void* new_ptr = temp_alloc(size);
+    memcpy(new_ptr, data, old_size);
+    return new_ptr;
+}
+
+typedef struct {
+    void* ptr;
+    size_t size;
+    source_location_t caller_location;
+} allocation_record_t;
+
+typedef struct {
+    allocation_record_t* data;
+    size_t size;
+    size_t capacity;
+    allocator_e allocator;
+} allocation_record_list_t;
+
+static allocation_record_list_t allocation_records = { .allocator = INTERNAL_ALLOCATOR };
+
+static void record_allocation(void* ptr, size_t size, source_location_t caller_location) {
+    assert(ptr != NULL);
+    allocation_record_t allocation_record = {
+        .ptr = ptr,
+        .size = size,
+        .caller_location = caller_location
+    };
+    array_append(allocation_records, allocation_record);
+}
+
+static void record_reallocation(size_t old_size, void* old_ptr, size_t new_size, void* new_ptr, source_location_t caller_location) {
+    if (old_ptr == NULL) {
+        record_allocation(new_ptr, new_size, caller_location);
+        return;
+    }
+
+    for (size_t i = 0; i < allocation_records.size; i++) {
+        allocation_record_t* record = &allocation_records.data[i];
+        if (record->ptr != old_ptr) {
+            continue;
+        }
+
+        assert(record->size == old_size && "Reallocation size does not match");
+
+        record->ptr = new_ptr;
+        record->size = new_size;
+        record->caller_location = caller_location;
+        return;
+    }
+
+    assert(false && "Could not find original allocation");
+}
+
+static void record_deallocation(void* ptr) {
+    if (ptr == NULL) {
+        return;
+    }
+
+    assert(allocation_records.size > 0);
+    for (size_t i = 0; i < allocation_records.size; i++) {
+        if (ptr != allocation_records.data[i].ptr) {
+            continue;
+        }
+
+        size_t last_index = allocation_records.size - 1;
+
+        allocation_record_t swap = allocation_records.data[i];
+        allocation_records.data[i] = allocation_records.data[last_index];
+        allocation_records.data[last_index] = swap;
+
+        allocation_records.size--;
+        return;
+    }
+
+    assert(false && "ptr was already freed");
+}
+
+static void print_leaked_allocations() {
+    if (allocation_records.size == 0) {
+        return;
+    }
+
+    printf("--- LEAKED ALLOCATIONS ---\n");
+    for (size_t i = 0; i < allocation_records.size; i++) {
+        allocation_record_t record = allocation_records.data[i];
+        source_location_t location = record.caller_location;
+        printf("%zu bytes at %s:%i\n", record.size, location.file, location.line);
+    }
+}
+
+static void register_atexits() {
+    static bool has_registered = false;
+    if (!has_registered) {
+        has_registered = true;
+        atexit(print_leaked_allocations);
+    }
+}
+
+void* alloc(size_t size, allocator_e allocator, source_location_t caller_location) {
+    register_atexits();
+    switch (allocator) {
+        case MAIN_ALLOCATOR: case INTERNAL_ALLOCATOR: {
+            void* ptr = malloc(size);
+            if (allocator != INTERNAL_ALLOCATOR) {
+                record_allocation(ptr, size, caller_location);
+            }
+            return ptr;
+        }
+        case TEMP_ALLOCATOR: return temp_alloc(size);
+        default: assert(false && "Invalid allocator");
+    }
+    return NULL;
+}
+
+void* resize_alloc(size_t old_size, void* data, size_t size, allocator_e allocator, source_location_t caller_location) {
+    register_atexits();
+    switch (allocator) {
+        case MAIN_ALLOCATOR: case INTERNAL_ALLOCATOR: {
+            void* ptr = realloc(data, size);
+            if (allocator != INTERNAL_ALLOCATOR) {
+                record_reallocation(old_size, data, size, ptr, caller_location);
+            }
+            return ptr;
+        }
+        case TEMP_ALLOCATOR: return temp_realloc(old_size, data, size);
+        default: assert(false && "Invalid allocator");
+    }
+    return NULL;
+}
+
+void free_alloc(void* ptr, allocator_e allocator) {
+    if (allocator == TEMP_ALLOCATOR) {
+        return;
+    }
+    assert(allocator == MAIN_ALLOCATOR || allocator == INTERNAL_ALLOCATOR);
+    if (allocator != INTERNAL_ALLOCATOR) {
+        record_deallocation(ptr);
+    }
+    free(ptr);
+}
+
+void temp_allocator_free_all() {
+    for (size_t i = 0; i < temp_allocation_block_list.size; i++) {
+        temp_allocation_block_list.data[i].offset = 0;
+    }
+}
 
 // TODO: Better random number generation
 uint64_t random_u64() {
@@ -38,8 +267,8 @@ const char* move_to_string(move_e move) {
     assert(false && "Invalid move");
 }
 
-move_list_t generate_random_move_scramble(int length) {
-    move_list_t scramble = {};
+move_list_t generate_random_move_scramble(int length, allocator_e allocator) {
+    move_list_t scramble = { .allocator = allocator };
 
     // TODO: array_reserve?
     move_e prev_base_move = MOVE_NULL;

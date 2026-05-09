@@ -133,12 +133,12 @@ void run_perf_tests() {
 
     timer_t timer;
 
-    g0_table_t g0_table;
+    g0_table_t* g0_table = alloc(sizeof(g0_table_t), MAIN_ALLOCATOR, SOURCE_LOCATION);
     double g0_table_init_total_time = 0.0;
     int g0_table_init_iterations = 10;
     for (int i = 0; i < g0_table_init_iterations; i++) {
         timer_start(&timer);
-        g0_init_table(&g0_table);
+        g0_init_table(g0_table);
         timer_stop(&timer);
         printf("G0 table initialization: %fs\n", timer_duration(timer));
         g0_table_init_total_time += timer_duration(timer);
@@ -148,7 +148,7 @@ void run_perf_tests() {
     int g0_solve_iterations = 10;
     for (int i = 0; i < g0_solve_iterations; i++) {
         timer_start(&timer);
-        solution_list_t solutions = solve_g0(&g0_table, g0_state);
+        solution_list_t solutions = solve_g0(g0_table, g0_state, TEMP_ALLOCATOR);
         timer_stop(&timer);
         printf("G0 solve: %fs\n", timer_duration(timer));
         g0_solve_total_time += timer_duration(timer);
@@ -163,7 +163,7 @@ void run_perf_tests() {
         }
     }
 
-    g1_table_t* g1_table = malloc(sizeof(g1_table_t));
+    g1_table_t* g1_table = alloc(sizeof(g1_table_t), MAIN_ALLOCATOR, SOURCE_LOCATION);
     double g1_table_init_total_time = 0.0;
     int g1_table_init_iterations = 10;
     for (int i = 0; i < g1_table_init_iterations; i++) {
@@ -178,7 +178,7 @@ void run_perf_tests() {
     int g1_solve_iterations = 10;
     for (int i = 0; i < g1_solve_iterations; i++) {
         timer_start(&timer);
-        solve_g1(g1_table, g1_state);
+        solve_g1(g1_table, g1_state, TEMP_ALLOCATOR);
         timer_stop(&timer);
         printf("G1 solve: %fs\n", timer_duration(timer));
         g1_solve_total_time += timer_duration(timer);
