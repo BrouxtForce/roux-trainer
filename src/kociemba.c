@@ -966,20 +966,70 @@ static void _search_g1_helper(g1_table_t* g1_table, g1_state_t g1_state, move_li
     }
 }
 
-solution_list_t solve_g1(g1_table_t* g1_table, g1_state_t g1_state) {
-    move_list_t move_list = {};
+static solution_list_t _solve_g1_at_depth(g1_table_t* g1_table, g1_state_t g1_state, int depth) {
     solution_list_t solution_list = {};
+    move_list_t move_list = {};
 
-    for (int depth = 1; depth < 18; depth++) {
+    _search_g1_helper(g1_table, g1_state, &move_list, &solution_list, depth);
+
+    array_free(move_list);
+
+    return solution_list;
+}
+
+solution_list_t solve_g1(g1_table_t* g1_table, g1_state_t g1_state) {
+    if (g1_is_solved(g1_state)) {
+        solution_list_t out = {};
+        array_append(out, (move_list_t){});
+        return out;
+    }
+
+    for (int depth = 1; depth <= 18; depth++) {
         printf("[G1] Searching depth %i\n", depth);
-
-        assert(move_list.size == 0);
-        _search_g1_helper(g1_table, g1_state, &move_list, &solution_list, depth);
-
-        if (solution_list.size > 0) {
-            break;
+        solution_list_t solutions = _solve_g1_at_depth(g1_table, g1_state, depth);
+        if (solutions.size > 0) {
+            return solutions;
         }
     }
 
-    return solution_list;
+    assert(false);
+}
+
+move_list_t solve_g0_g1(g0_table_t* g0_table, g1_table_t* g1_table, g0_state_t g0_state, g1_state_t g1_state) {
+    // TODO: Search suboptimal G0 solutions
+    solution_list_t g0_solutions = solve_g0(g0_table, g0_state);
+    assert(g0_solutions.size > 0);
+
+    move_list_t best_g0_solution = {};
+    move_list_t best_g1_solution = {};
+
+    bool found_solution = false;
+    for (int depth = 1; depth <= 18; depth++) {
+        for (size_t i = 0; i < g0_solutions.size; i++) {
+            move_list_t g0_solution = g0_solutions.data[i];
+
+            g1_state_t new_state = g1_state;
+            for (size_t j = 0; j < g0_solution.size; j++) {
+                g1_execute_move(&new_state, g0_solution.data[j]);
+            }
+
+            solution_list_t g1_solutions = _solve_g1_at_depth(g1_table, new_state, depth);
+            if (g1_solutions.size > 0) {
+                best_g0_solution = g0_solution;
+                best_g1_solution = g1_solutions.data[0];
+                found_solution = true;
+                break;
+            }
+        }
+        if (found_solution) break;
+    }
+
+    move_list_t solution = {};
+    array_reserve(solution, best_g0_solution.size + best_g1_solution.size);
+
+    memcpy(solution.data, best_g0_solution.data, best_g0_solution.size * sizeof(move_e));
+    memcpy(solution.data + best_g0_solution.size, best_g1_solution.data, best_g1_solution.size * sizeof(move_e));
+    solution.size = best_g0_solution.size + best_g1_solution.size;
+
+    return solution;
 }

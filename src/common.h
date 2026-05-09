@@ -5,16 +5,19 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#define array_append(array, element) \
+#define array_reserve(array, amount) \
     do { \
-        if ((array).size >= (array).capacity) { \
-            if ((array).capacity == 0) { \
-                (array).capacity = 8; \
-            } else { \
-                (array).capacity *= 2; \
-            } \
+        if ((amount) > (array).capacity) { \
+            (array).capacity *= 2; \
+            if ((array).capacity < 8)      (array).capacity = 8; \
+            if ((array).capacity < amount) (array).capacity = (amount); \
             (array).data = realloc((array).data, (array).capacity * sizeof *(array).data); \
         } \
+    } while (false)
+
+#define array_append(array, element) \
+    do { \
+        array_reserve(array, (array).size + 1); \
         (array).data[(array).size++] = (element); \
     } while (false)
 

@@ -144,3 +144,5 @@ void g1_init_table(g1_table_t* g1_table);
 bool g1_is_solved(g1_state_t g1_state);
 
 solution_list_t solve_g1(g1_table_t* g1_table, g1_state_t g1_state);
+
+move_list_t solve_g0_g1(g0_table_t* g0_table, g1_table_t* g1_table, g0_state_t g0_state, g1_state_t g1_state);
