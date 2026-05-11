@@ -567,7 +567,7 @@ void _recursive_g0_fill_table(g0_table_t* g0_table, g0_state_t g0_state, move_e 
     }
 }
 
-#define G0_MAGIC_ITERATIONS 10
+#define G0_MAGIC_ITERATIONS 1
 
 void g0_init_table(g0_table_t* g0_table) {
     double   min_average_depth = INFINITY;
@@ -679,8 +679,6 @@ solution_list_t solve_g0(const g0_table_t* g0_table, g0_state_t g0_state, alloca
     solution_list_t solution_list = { .allocator = allocator };
 
     for (int depth = 1; depth <= 12; depth++) {
-        printf("[G0] Searching depth %i\n", depth);
-
         assert(move_list.size == 0);
         _search_g0_helper(g0_table, g0_state, &move_list, &solution_list, depth);
 
@@ -844,7 +842,7 @@ void _recursive_g1_fill_table(g1_table_t* g1_table, g1_state_t g1_state, move_e 
     }
 }
 
-#define G1_MAGIC_ITERATIONS 10
+#define G1_MAGIC_ITERATIONS 1
 
 void g1_init_table(g1_table_t* g1_table) {
     double   min_average_depth = INFINITY;

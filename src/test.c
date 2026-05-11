@@ -6,6 +6,23 @@
 #include "visual_cube.h"
 #include "kociemba.h"
 
+typedef struct {
+    clock_t start;
+    clock_t end;
+} timer_t;
+
+void timer_start(timer_t* timer) {
+    timer->start = clock();
+}
+
+void timer_stop(timer_t* timer) {
+    timer->end = clock();
+}
+
+double timer_duration(timer_t timer) {
+    return (double)(timer.end - timer.start) / CLOCKS_PER_SEC;
+}
+
 move_e consume_next_move(const char** alg_string) {
     while (true) {
         char next_char = (*alg_string)[0];
@@ -100,26 +117,57 @@ void run_tests() {
         }
     }
 
+    g0_table_t* g0_table = alloc(sizeof(g0_table_t), MAIN_ALLOCATOR, SOURCE_LOCATION);
+    g0_init_table(g0_table);
+
+    g1_table_t* g1_table = alloc(sizeof(g1_table_t), MAIN_ALLOCATOR, SOURCE_LOCATION);
+    g1_init_table(g1_table);
+
+    int num_scrambles = 1000;
+
+    uint32_t total_moves = 0;
+    timer_t timer;
+    timer_start(&timer);
+    for (int i = 0; i < num_scrambles; i++) {
+        g0_state_t g0_state = G0_STATE_SOLVED;
+        g1_state_t g1_state = G1_STATE_SOLVED;
+
+        move_list_t scramble = generate_random_move_scramble(30, TEMP_ALLOCATOR);
+        for (size_t i = 0; i < scramble.size; i++) {
+            g0_execute_move(&g0_state, scramble.data[i]);
+            g1_execute_move(&g1_state, scramble.data[i]);
+        }
+
+        move_list_t move_list = solve_g0_g1(g0_table, g1_table, g0_state, g1_state, TEMP_ALLOCATOR);
+        printf("Solved %i scrambles\r", i + 1);
+        fflush(stdout);
+        total_moves += move_list.size;
+
+        for (size_t i = 0; i < move_list.size; i++) {
+            g0_execute_move(&g0_state, move_list.data[i]);
+            g1_execute_move(&g1_state, move_list.data[i]);
+        }
+
+        if (!g0_is_solved(g0_state) || !g1_is_solved(g1_state)) {
+            all_tests_succeeded = false;
+        }
+
+        temp_allocator_free_all();
+    }
+    timer_stop(&timer);
+
+    double average_time      = timer_duration(timer) / num_scrambles;
+    double average_movecount = (double)total_moves / num_scrambles;
+
+    printf("Average time per solve:  %fs\n", average_time);
+    printf("Average moves per solve: %fs\n", average_movecount);
+
     if (all_tests_succeeded) {
         printf("All tests succeeded!\n");
     }
-}
 
-typedef struct {
-    clock_t start;
-    clock_t end;
-} timer_t;
-
-void timer_start(timer_t* timer) {
-    timer->start = clock();
-}
-
-void timer_stop(timer_t* timer) {
-    timer->end = clock();
-}
-
-double timer_duration(timer_t timer) {
-    return (double)(timer.end - timer.start) / CLOCKS_PER_SEC;
+    free_alloc(g0_table, MAIN_ALLOCATOR);
+    free_alloc(g1_table, MAIN_ALLOCATOR);
 }
 
 void run_perf_tests() {

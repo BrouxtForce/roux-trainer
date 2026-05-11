@@ -101,8 +101,8 @@ void g0_g1_state_write_visual_cube_state(visual_cube_state_t* visual_cube_state,
 void g0_execute_move(g0_state_t* g0_state, move_e move);
 void g1_execute_move(g1_state_t* g1_state, move_e move);
 
-#define G0_TABLE_SIZE  95039
-#define G0_TABLE_DEPTH 5
+#define G0_TABLE_SIZE  1138856
+#define G0_TABLE_DEPTH 6
 
 typedef struct {
     g0_state_t state;
@@ -121,10 +121,10 @@ void g0_init_table(g0_table_t* g0_table);
 
 bool g0_is_solved(g0_state_t g0_state);
 
-solution_list_t solve_g0(const g0_table_t* g0_table, g0_state_t g0_state, allocator_e);
+solution_list_t solve_g0(const g0_table_t* g0_table, g0_state_t g0_state, allocator_e allocator);
 
-#define G1_TABLE_SIZE 883485
-#define G1_TABLE_DEPTH 7
+#define G1_TABLE_SIZE  5068603
+#define G1_TABLE_DEPTH 8
 
 typedef struct {
     g1_state_t state;
