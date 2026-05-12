@@ -267,6 +267,13 @@ const char* move_to_string(move_e move) {
     assert(false && "Invalid move");
 }
 
+move_composition_t decompose_move(move_e move) {
+    return (move_composition_t){
+        .face_index = move / 3,
+        .count_cw   = (move % 3) + 1
+    };
+}
+
 move_list_t generate_random_move_scramble(int length, allocator_e allocator) {
     move_list_t scramble = { .allocator = allocator };
 

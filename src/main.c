@@ -13,6 +13,7 @@
 #include "visual_cube.h"
 #include "lse.h"
 #include "kociemba.h"
+#include "revenge.h"
 
 #define ESC_ERASE_ENTIRE_SCREEN "\x1b[H\x1b[0J"
 #define ESC_SAVE_SCREEN "\x1b[?47h"
@@ -138,6 +139,7 @@ void draw_g0_g1_cube_state(g0_state_t g0_state, g1_state_t g1_state) {
 
 // TODO: Put this in a header file
 void run_tests();
+void kociemba_test();
 void run_perf_tests();
 
 void run_kociemba() {
@@ -181,6 +183,10 @@ int main(int argc, char** argv) {
     // TODO: Proper command line argument parsing
     if (argc >= 2 && strcmp(argv[1], "test") == 0) {
         run_tests();
+        return 0;
+    }
+    if (argc >= 2 && strcmp(argv[1], "kociemba_test") == 0) {
+        kociemba_test();
         return 0;
     }
     if (argc >= 2 && strcmp(argv[1], "perf") == 0) {

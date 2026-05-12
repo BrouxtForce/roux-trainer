@@ -45,3 +45,26 @@ void visual_cube_state_write_corner(visual_cube_state_t* visual_cube_state, visu
 void draw_visual_cube_state(const visual_cube_state_t* visual_cube_state);
 
 void get_visual_cube_state_string(const visual_cube_state_t* visual_cube_state, char buffer[55]);
+
+// TODO: Should this be merged with the original visual_cube_state_t?
+typedef struct {
+    face_index_e* stickers[6];
+    int n;
+    allocator_e allocator;
+} big_visual_cube_state_t;
+
+void big_visual_cube_state_init(big_visual_cube_state_t* state, int n, allocator_e allocator);
+void big_visual_cube_state_free(big_visual_cube_state_t* state);
+void big_visual_cube_state_reset(big_visual_cube_state_t* state);
+
+void big_visual_cube_state_write_center(big_visual_cube_state_t* state, face_index_e face, int center_index, face_index_e sticker_state);
+
+// TODO: This function only works for 4x4
+void big_visual_cube_state_write_wing(big_visual_cube_state_t* state, face_index_e primary_face, face_index_e secondary_face,
+                                      face_index_e primary_sticker, face_index_e secondary_sticker);
+
+void big_visual_cube_state_copy_corners(big_visual_cube_state_t* big_visual_cube_state, visual_cube_state_t* visual_cube_state);
+
+void draw_big_visual_cube_state(const big_visual_cube_state_t* big_visual_cube_state);
+
+char* get_big_visual_cube_state_string(const big_visual_cube_state_t* state, allocator_e allocator);

@@ -128,6 +128,18 @@ typedef enum : uint8_t {
 const char* move_to_string(move_e move);
 
 typedef struct {
+    face_index_e face_index;
+    int          count_cw;
+} move_composition_t;
+
+move_composition_t decompose_move(move_e move);
+
+typedef struct {
+    move_e  move;
+    uint8_t width;
+} move_t;
+
+typedef struct {
     move_e* data;
     size_t size;
     size_t capacity;
