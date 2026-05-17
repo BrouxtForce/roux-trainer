@@ -104,20 +104,9 @@ void g1_execute_move(g1_state_t* g1_state, move_e move);
 #define G0_TABLE_SIZE  1138856
 #define G0_TABLE_DEPTH 6
 
-typedef struct {
-    g0_state_t state;
-    int next_index;
-    int distance_from_solved;
-} g0_table_node_t;
+typedef struct g0_table_t g0_table_t;
 
-typedef struct {
-    g0_table_node_t entries[G0_TABLE_SIZE];
-    uint32_t count;
-    uint32_t next_free;
-    uint64_t magic;
-} g0_table_t;
-
-void g0_init_table(g0_table_t* g0_table);
+g0_table_t* g0_init_table(allocator_e allocator);
 
 bool g0_is_solved(g0_state_t g0_state);
 
@@ -126,20 +115,9 @@ solution_list_t solve_g0(const g0_table_t* g0_table, g0_state_t g0_state, alloca
 #define G1_TABLE_SIZE  5068603
 #define G1_TABLE_DEPTH 8
 
-typedef struct {
-    g1_state_t state;
-    int next_index;
-    int distance_from_solved;
-} g1_table_node_t;
+typedef struct g1_table_t g1_table_t;
 
-typedef struct {
-    g1_table_node_t entries[G1_TABLE_SIZE];
-    uint32_t count;
-    uint32_t next_free;
-    uint64_t magic;
-} g1_table_t;
-
-void g1_init_table(g1_table_t* g1_table);
+g1_table_t* g1_init_table(allocator_e allocator);
 
 bool g1_is_solved(g1_state_t g1_state);
 

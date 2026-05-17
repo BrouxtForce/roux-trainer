@@ -152,11 +152,8 @@ void run_kociemba() {
         g1_execute_move(&g1_state, scramble.data[i]);
     }
 
-    g0_table_t* g0_table = alloc(sizeof(g0_table_t), MAIN_ALLOCATOR, SOURCE_LOCATION);
-    g0_init_table(g0_table);
-
-    g1_table_t* g1_table = alloc(sizeof(g1_table_t), MAIN_ALLOCATOR, SOURCE_LOCATION);
-    g1_init_table(g1_table);
+    g0_table_t* g0_table = g0_init_table(MAIN_ALLOCATOR);
+    g1_table_t* g1_table = g1_init_table(MAIN_ALLOCATOR);
 
     printf("Scramble: ");
     for (size_t i = 0; i < scramble.size; i++) {

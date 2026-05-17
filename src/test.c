@@ -219,11 +219,8 @@ void run_tests() {
 }
 
 void kociemba_test() {
-    g0_table_t* g0_table = alloc(sizeof(g0_table_t), MAIN_ALLOCATOR, SOURCE_LOCATION);
-    g0_init_table(g0_table);
-
-    g1_table_t* g1_table = alloc(sizeof(g1_table_t), MAIN_ALLOCATOR, SOURCE_LOCATION);
-    g1_init_table(g1_table);
+    g0_table_t* g0_table = g0_init_table(MAIN_ALLOCATOR);
+    g1_table_t* g1_table = g1_init_table(MAIN_ALLOCATOR);
 
     int num_scrambles = 1000;
 
@@ -277,12 +274,13 @@ void run_perf_tests() {
 
     timer_t timer;
 
-    g0_table_t* g0_table = alloc(sizeof(g0_table_t), MAIN_ALLOCATOR, SOURCE_LOCATION);
+    g0_table_t* g0_table = NULL;
     double g0_table_init_total_time = 0.0;
     int g0_table_init_iterations = 10;
     for (int i = 0; i < g0_table_init_iterations; i++) {
         timer_start(&timer);
-        g0_init_table(g0_table);
+        free_alloc(g0_table, MAIN_ALLOCATOR);
+        g0_table = g0_init_table(MAIN_ALLOCATOR);
         timer_stop(&timer);
         printf("G0 table initialization: %fs\n", timer_duration(timer));
         g0_table_init_total_time += timer_duration(timer);
@@ -307,12 +305,13 @@ void run_perf_tests() {
         }
     }
 
-    g1_table_t* g1_table = alloc(sizeof(g1_table_t), MAIN_ALLOCATOR, SOURCE_LOCATION);
+    g1_table_t* g1_table = NULL;
     double g1_table_init_total_time = 0.0;
     int g1_table_init_iterations = 10;
     for (int i = 0; i < g1_table_init_iterations; i++) {
         timer_start(&timer);
-        g1_init_table(g1_table);
+        free_alloc(g1_table, MAIN_ALLOCATOR);
+        g1_table = g1_init_table(MAIN_ALLOCATOR);
         timer_stop(&timer);
         printf("G1 table initialization: %fs\n", timer_duration(timer));
         g1_table_init_total_time += timer_duration(timer);

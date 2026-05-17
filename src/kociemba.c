@@ -425,125 +425,21 @@ void g1_execute_move(g1_state_t* g1_state, move_e move) {
     }
 }
 
-static bool _g0_state_equals(g0_state_t left, g0_state_t right) {
+static bool g0_state_equals(g0_state_t left, g0_state_t right) {
     assert(left._padding == 0 && right._padding == 0);
     return memcmp(&left, &right, sizeof(g0_state_t)) == 0;
 }
 
-static int _g0_table_get_next_free(g0_table_t* g0_table) {
-    while (g0_table->next_free < G0_TABLE_SIZE) {
-        if (_g0_state_equals(g0_table->entries[g0_table->next_free].state, G0_STATE_NULL)) {
-            // TODO: This should probably be next_free++ (but test it)
-            return g0_table->next_free;
-        }
-        g0_table->next_free++;
-    }
-    assert(false);
-}
-
-static int _g0_table_get_index(g0_state_t g0_state, uint64_t magic) {
-    assert(sizeof(uint64_t) == sizeof(g0_state_t));
-    assert(g0_state._padding == 0);
-
-    uint64_t num = *(uint64_t*)&g0_state;
-    return ((num * magic) >> 44) % G0_TABLE_SIZE;
-}
-
-[[nodiscard]]
-static bool _g0_table_insert(g0_table_t* g0_table, g0_state_t g0_state, int distance_from_solved) {
-    int index = _g0_table_get_index(g0_state, g0_table->magic);
-
-    g0_table_node_t* entry = &g0_table->entries[index];
-
-    // Case 1: The entry is empty
-    if (_g0_state_equals(entry->state, G0_STATE_NULL)) {
-        entry->state = g0_state;
-        entry->next_index = -1;
-        entry->distance_from_solved = distance_from_solved;
-
-        g0_table->count++;
-        return true;
-    }
-
-    // Case 2: g0_state collides with an entry already present in the table
-    int entry_index = _g0_table_get_index(entry->state, g0_table->magic);
-    if (entry_index == index) {
-        while (true) {
-            if (_g0_state_equals(entry->state, g0_state)) {
-                if (entry->distance_from_solved > distance_from_solved) {
-                    entry->distance_from_solved = distance_from_solved;
-                    return true;
-                }
-                return false;
-            }
-            if (entry->next_index == -1) {
-                break;
-            }
-            entry = &g0_table->entries[entry->next_index];
-        }
-
-        int free_entry_index = _g0_table_get_next_free(g0_table);
-        entry->next_index = free_entry_index;
-
-        g0_table_node_t* free_entry = &g0_table->entries[free_entry_index];
-        free_entry->state = g0_state;
-        free_entry->next_index = -1;
-        free_entry->distance_from_solved = distance_from_solved;
-
-        g0_table->count++;
-        return true;
-    }
-
-    // Case 3: The entry is filled with a linked list node that collided with another entry
-    g0_table_node_t* prev_entry = NULL;
-    g0_table_node_t* other_entry = &g0_table->entries[entry_index];
-    while (true) {
-        if (_g0_state_equals(other_entry->state, entry->state)) {
-            break;
-        }
-        if (other_entry->next_index == -1) {
-            assert(false);
-        }
-        prev_entry = other_entry;
-        other_entry = &g0_table->entries[other_entry->next_index];
-    }
-
-    if (prev_entry != NULL) {
-        prev_entry->next_index = other_entry->next_index;
-    }
-
-    g0_state_t missing_state = other_entry->state;
-    int missing_distance_from_solved = other_entry->distance_from_solved;
-
-    other_entry->state = g0_state;
-    other_entry->next_index = -1;
-    other_entry->distance_from_solved = distance_from_solved;
-
-    bool result = _g0_table_insert(g0_table, missing_state, missing_distance_from_solved);
-    assert(result);
-
-    return true;
-}
-
-static int _g0_table_lookup(const g0_table_t* g0_table, g0_state_t g0_state) {
-    int index = _g0_table_get_index(g0_state, g0_table->magic);
-
-    const g0_table_node_t* entry = &g0_table->entries[index];
-    while (true) {
-        if (_g0_state_equals(entry->state, g0_state)) {
-            return entry->distance_from_solved;
-        }
-        if (entry->next_index == -1) {
-            break;
-        }
-        entry = &g0_table->entries[entry->next_index];
-    }
-
-    return -1;
-}
+#define HASH_TABLE_NAME g0_table
+#define STATE_TYPE g0_state_t
+#define STATE_EQUALS(a, b) g0_state_equals(a, b)
+#define STATE_TO_U64(state) (*(uint64_t*)&state)
+#define STATE_NULL G0_STATE_NULL
+#define HASH_TABLE_SIZE G0_TABLE_SIZE
+#include "hash_table.h"
 
 void _recursive_g0_fill_table(g0_table_t* g0_table, g0_state_t g0_state, move_e prev_base_move, int depth, int distance_from_solved) {
-    if (!_g0_table_insert(g0_table, g0_state, distance_from_solved)) {
+    if (!g0_table_insert(g0_table, g0_state, distance_from_solved)) {
         return;
     }
 
@@ -575,64 +471,14 @@ void _recursive_g0_fill_table(g0_table_t* g0_table, g0_state_t g0_state, move_e 
     }
 }
 
-#define G0_MAGIC_ITERATIONS 1
-
-void g0_init_table(g0_table_t* g0_table) {
-    double   min_average_depth = INFINITY;
-    uint64_t best_magic_number = 0;
-
-    printf("Initializing G0 table\n");
-    for (int i = 0; i < G0_MAGIC_ITERATIONS; i++) {
-        memset(g0_table, 0, sizeof(*g0_table));
-        g0_table->magic = random_u64();
-        _recursive_g0_fill_table(g0_table, G0_STATE_SOLVED, MOVE_NULL, G0_TABLE_DEPTH, 0);
-
-        uint32_t max_depth    = 0;
-        uint32_t num_occupied = 0;
-        uint32_t num_roots    = 0;
-        uint32_t total_depth  = 0;
-
-        for (int i = 0; i < G0_TABLE_SIZE; i++) {
-            g0_table_node_t entry = g0_table->entries[i];
-
-            if (_g0_state_equals(entry.state, G0_STATE_NULL)) {
-                continue;
-            }
-
-            num_occupied++;
-
-            if (i != _g0_table_get_index(entry.state, g0_table->magic)) {
-                // This node is not a root node (it is the leaf of another entry in the table)
-                continue;
-            }
-            num_roots++;
-
-            uint32_t depth = 1;
-            while (entry.next_index != -1) {
-                entry = g0_table->entries[entry.next_index];
-                depth++;
-            }
-            total_depth += depth;
-
-            if (depth > max_depth) max_depth = depth;
-        }
-        assert(num_occupied == G0_TABLE_SIZE && num_occupied == g0_table->count);
-
-        double average_depth = (double)total_depth / num_roots;
-        if (average_depth < min_average_depth) {
-            min_average_depth = average_depth;
-            best_magic_number = g0_table->magic;
-            printf("(best) ");
-        }
-
-        printf("Iteration %i: max depth %i; average depth: %f\n", i, max_depth, (double)total_depth / num_roots);
-    }
-
+g0_table_t* g0_init_table(allocator_e allocator) {
+    g0_table_t* g0_table = alloc(sizeof(g0_table_t), allocator, SOURCE_LOCATION);
     memset(g0_table, 0, sizeof(*g0_table));
-    g0_table->magic = best_magic_number;
+
+    g0_table->magic = random_u64();
     _recursive_g0_fill_table(g0_table, G0_STATE_SOLVED, MOVE_NULL, G0_TABLE_DEPTH, 0);
 
-    printf("Selected %llu (average depth: %f)\n", best_magic_number, min_average_depth);
+    return g0_table;
 }
 
 bool g0_is_solved(g0_state_t g0_state) {
@@ -647,7 +493,7 @@ static void _search_g0_helper(const g0_table_t* g0_table, g0_state_t g0_state, m
         return;
     }
 
-    int distance_from_solved = _g0_table_lookup(g0_table, g0_state);
+    int distance_from_solved = g0_table_lookup(g0_table, g0_state);
     if (distance_from_solved == -1) {
         // Best case scenario
         distance_from_solved = G0_TABLE_DEPTH + 1;
@@ -698,124 +544,20 @@ solution_list_t solve_g0(const g0_table_t* g0_table, g0_state_t g0_state, alloca
     return solution_list;
 }
 
-static bool _g1_state_equals(g1_state_t left, g1_state_t right) {
+static bool g1_state_equals(g1_state_t left, g1_state_t right) {
     return memcmp(&left, &right, sizeof(g1_state_t)) == 0;
 }
 
-// TODO: Most of the table logic for G1 is exactly the same above as written below. I would rather not have
-// all of this logic be duplicated and written in two separate places.
-
-static int _g1_table_get_next_free(g1_table_t* g1_table) {
-    while (g1_table->next_free < G1_TABLE_SIZE) {
-        if (_g1_state_equals(g1_table->entries[g1_table->next_free].state, G1_STATE_NULL)) {
-            return g1_table->next_free;
-        }
-        g1_table->next_free++;
-    }
-    assert(false);
-}
-
-static int _g1_table_get_index(g1_state_t g1_state, uint64_t magic) {
-    // TODO: This does not make use of all of g1's bits
-    uint64_t num = *(uint64_t*)&g1_state;
-    return ((num * magic) >> 32) % G1_TABLE_SIZE;
-}
-
-[[nodiscard]]
-static bool _g1_table_insert(g1_table_t* g1_table, g1_state_t g1_state, int distance_from_solved) {
-    int index = _g1_table_get_index(g1_state, g1_table->magic);
-
-    g1_table_node_t* entry = &g1_table->entries[index];
-
-    // Case 1: The entry is empty
-    if (_g1_state_equals(entry->state, G1_STATE_NULL)) {
-        entry->state = g1_state;
-        entry->next_index = -1;
-        entry->distance_from_solved = distance_from_solved;
-
-        g1_table->count++;
-        return true;
-    }
-
-    // Case 2: g0_state collides with an entry already present in the table
-    int entry_index = _g1_table_get_index(entry->state, g1_table->magic);
-    if (entry_index == index) {
-        while (true) {
-            if (_g1_state_equals(entry->state, g1_state)) {
-                if (entry->distance_from_solved > distance_from_solved) {
-                    entry->distance_from_solved = distance_from_solved;
-                    return true;
-                }
-                return false;
-            }
-            if (entry->next_index == -1) {
-                break;
-            }
-            entry = &g1_table->entries[entry->next_index];
-        }
-
-        int free_entry_index = _g1_table_get_next_free(g1_table);
-        entry->next_index = free_entry_index;
-
-        g1_table_node_t* free_entry = &g1_table->entries[free_entry_index];
-        free_entry->state = g1_state;
-        free_entry->next_index = -1;
-        free_entry->distance_from_solved = distance_from_solved;
-
-        g1_table->count++;
-        return true;
-    }
-
-    // Case 3: The entry is filled with a linked list node that collided with another entry
-    g1_table_node_t* prev_entry = NULL;
-    g1_table_node_t* other_entry = &g1_table->entries[entry_index];
-    while (true) {
-        if (_g1_state_equals(other_entry->state, entry->state)) {
-            break;
-        }
-        if (other_entry->next_index == -1) {
-            assert(false);
-        }
-        prev_entry = other_entry;
-        other_entry = &g1_table->entries[other_entry->next_index];
-    }
-
-    if (prev_entry != NULL) {
-        prev_entry->next_index = other_entry->next_index;
-    }
-
-    g1_state_t missing_state = other_entry->state;
-    int missing_distance_from_solved = other_entry->distance_from_solved;
-
-    other_entry->state = g1_state;
-    other_entry->next_index = -1;
-    other_entry->distance_from_solved = distance_from_solved;
-
-    bool result = _g1_table_insert(g1_table, missing_state, missing_distance_from_solved);
-    assert(result);
-
-    return true;
-}
-
-static int _g1_table_lookup(const g1_table_t* g1_table, g1_state_t g1_state) {
-    int index = _g1_table_get_index(g1_state, g1_table->magic);
-
-    const g1_table_node_t* entry = &g1_table->entries[index];
-    while (true) {
-        if (_g1_state_equals(entry->state, g1_state)) {
-            return entry->distance_from_solved;
-        }
-        if (entry->next_index == -1) {
-            break;
-        }
-        entry = &g1_table->entries[entry->next_index];
-    }
-
-    return -1;
-}
+#define HASH_TABLE_NAME g1_table
+#define STATE_TYPE g1_state_t
+#define STATE_EQUALS(a, b) g1_state_equals(a, b)
+#define STATE_TO_U64(state) (*(uint64_t*)&state)
+#define STATE_NULL G1_STATE_NULL
+#define HASH_TABLE_SIZE G1_TABLE_SIZE
+#include "hash_table.h"
 
 void _recursive_g1_fill_table(g1_table_t* g1_table, g1_state_t g1_state, move_e prev_base_move, int depth, int distance_from_solved) {
-    if (!_g1_table_insert(g1_table, g1_state, distance_from_solved)) {
+    if (!g1_table_insert(g1_table, g1_state, distance_from_solved)) {
         return;
     }
 
@@ -858,64 +600,14 @@ void _recursive_g1_fill_table(g1_table_t* g1_table, g1_state_t g1_state, move_e 
     }
 }
 
-#define G1_MAGIC_ITERATIONS 1
-
-void g1_init_table(g1_table_t* g1_table) {
-    double   min_average_depth = INFINITY;
-    uint64_t best_magic_number = 0;
-
-    printf("Initializing G1 table\n");
-    for (int i = 0; i < G1_MAGIC_ITERATIONS; i++) {
-        memset(g1_table, 0, sizeof(*g1_table));
-        g1_table->magic = random_u64();
-        _recursive_g1_fill_table(g1_table, G1_STATE_SOLVED, MOVE_NULL, G1_TABLE_DEPTH, 0);
-
-        uint32_t max_depth    = 0;
-        uint32_t num_occupied = 0;
-        uint32_t num_roots    = 0;
-        uint32_t total_depth  = 0;
-
-        for (int i = 0; i < G1_TABLE_SIZE; i++) {
-            g1_table_node_t entry = g1_table->entries[i];
-
-            if (_g1_state_equals(entry.state, G1_STATE_NULL)) {
-                continue;
-            }
-
-            num_occupied++;
-
-            if (i != _g1_table_get_index(entry.state, g1_table->magic)) {
-                // This node is not a root node (it is the leaf of another entry in the table)
-                continue;
-            }
-            num_roots++;
-
-            uint32_t depth = 1;
-            while (entry.next_index != -1) {
-                entry = g1_table->entries[entry.next_index];
-                depth++;
-            }
-            total_depth += depth;
-
-            if (depth > max_depth) max_depth = depth;
-        }
-        assert(num_occupied == G1_TABLE_SIZE && num_occupied == g1_table->count);
-
-        double average_depth = (double)total_depth / num_roots;
-        if (average_depth < min_average_depth) {
-            min_average_depth = average_depth;
-            best_magic_number = g1_table->magic;
-            printf("(best) ");
-        }
-
-        printf("Iteration %i: max depth %i; average depth: %f\n", i, max_depth, (double)total_depth / num_roots);
-    }
-
+g1_table_t* g1_init_table(allocator_e allocator) {
+    g1_table_t* g1_table = alloc(sizeof(g1_table_t), allocator, SOURCE_LOCATION);
     memset(g1_table, 0, sizeof(*g1_table));
-    g1_table->magic = best_magic_number;
+
+    g1_table->magic = random_u64();
     _recursive_g1_fill_table(g1_table, G1_STATE_SOLVED, MOVE_NULL, G1_TABLE_DEPTH, 0);
 
-    printf("Selected %llu (average depth: %f)\n", best_magic_number, min_average_depth);
+    return g1_table;
 }
 
 bool g1_is_solved(g1_state_t g1_state) {
@@ -930,7 +622,7 @@ static void _search_g1_helper(g1_table_t* g1_table, g1_state_t g1_state, move_li
         return;
     }
 
-    int distance_from_solved = _g1_table_lookup(g1_table, g1_state);
+    int distance_from_solved = g1_table_lookup(g1_table, g1_state);
     if (distance_from_solved == -1) {
         // Best case scenario
         distance_from_solved = G1_TABLE_DEPTH + 1;
