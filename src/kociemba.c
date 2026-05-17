@@ -449,7 +449,8 @@ static int _g0_table_get_index(g0_state_t g0_state, uint64_t magic) {
     return ((num * magic) >> 44) % G0_TABLE_SIZE;
 }
 
-static void _g0_table_insert(g0_table_t* g0_table, g0_state_t g0_state, int distance_from_solved) {
+[[nodiscard]]
+static bool _g0_table_insert(g0_table_t* g0_table, g0_state_t g0_state, int distance_from_solved) {
     int index = _g0_table_get_index(g0_state, g0_table->magic);
 
     g0_table_node_t* entry = &g0_table->entries[index];
@@ -461,7 +462,7 @@ static void _g0_table_insert(g0_table_t* g0_table, g0_state_t g0_state, int dist
         entry->distance_from_solved = distance_from_solved;
 
         g0_table->count++;
-        return;
+        return true;
     }
 
     // Case 2: g0_state collides with an entry already present in the table
@@ -471,8 +472,9 @@ static void _g0_table_insert(g0_table_t* g0_table, g0_state_t g0_state, int dist
             if (_g0_state_equals(entry->state, g0_state)) {
                 if (entry->distance_from_solved > distance_from_solved) {
                     entry->distance_from_solved = distance_from_solved;
+                    return true;
                 }
-                return;
+                return false;
             }
             if (entry->next_index == -1) {
                 break;
@@ -489,7 +491,7 @@ static void _g0_table_insert(g0_table_t* g0_table, g0_state_t g0_state, int dist
         free_entry->distance_from_solved = distance_from_solved;
 
         g0_table->count++;
-        return;
+        return true;
     }
 
     // Case 3: The entry is filled with a linked list node that collided with another entry
@@ -511,12 +513,16 @@ static void _g0_table_insert(g0_table_t* g0_table, g0_state_t g0_state, int dist
     }
 
     g0_state_t missing_state = other_entry->state;
+    int missing_distance_from_solved = other_entry->distance_from_solved;
 
     other_entry->state = g0_state;
     other_entry->next_index = -1;
     other_entry->distance_from_solved = distance_from_solved;
 
-    _g0_table_insert(g0_table, missing_state, distance_from_solved);
+    bool result = _g0_table_insert(g0_table, missing_state, missing_distance_from_solved);
+    assert(result);
+
+    return true;
 }
 
 static int _g0_table_lookup(const g0_table_t* g0_table, g0_state_t g0_state) {
@@ -537,7 +543,9 @@ static int _g0_table_lookup(const g0_table_t* g0_table, g0_state_t g0_state) {
 }
 
 void _recursive_g0_fill_table(g0_table_t* g0_table, g0_state_t g0_state, move_e prev_base_move, int depth, int distance_from_solved) {
-    _g0_table_insert(g0_table, g0_state, distance_from_solved);
+    if (!_g0_table_insert(g0_table, g0_state, distance_from_solved)) {
+        return;
+    }
 
     if (depth <= 0) {
         return;
@@ -713,7 +721,8 @@ static int _g1_table_get_index(g1_state_t g1_state, uint64_t magic) {
     return ((num * magic) >> 32) % G1_TABLE_SIZE;
 }
 
-static void _g1_table_insert(g1_table_t* g1_table, g1_state_t g1_state, int distance_from_solved) {
+[[nodiscard]]
+static bool _g1_table_insert(g1_table_t* g1_table, g1_state_t g1_state, int distance_from_solved) {
     int index = _g1_table_get_index(g1_state, g1_table->magic);
 
     g1_table_node_t* entry = &g1_table->entries[index];
@@ -725,7 +734,7 @@ static void _g1_table_insert(g1_table_t* g1_table, g1_state_t g1_state, int dist
         entry->distance_from_solved = distance_from_solved;
 
         g1_table->count++;
-        return;
+        return true;
     }
 
     // Case 2: g0_state collides with an entry already present in the table
@@ -735,8 +744,9 @@ static void _g1_table_insert(g1_table_t* g1_table, g1_state_t g1_state, int dist
             if (_g1_state_equals(entry->state, g1_state)) {
                 if (entry->distance_from_solved > distance_from_solved) {
                     entry->distance_from_solved = distance_from_solved;
+                    return true;
                 }
-                return;
+                return false;
             }
             if (entry->next_index == -1) {
                 break;
@@ -753,7 +763,7 @@ static void _g1_table_insert(g1_table_t* g1_table, g1_state_t g1_state, int dist
         free_entry->distance_from_solved = distance_from_solved;
 
         g1_table->count++;
-        return;
+        return true;
     }
 
     // Case 3: The entry is filled with a linked list node that collided with another entry
@@ -775,12 +785,16 @@ static void _g1_table_insert(g1_table_t* g1_table, g1_state_t g1_state, int dist
     }
 
     g1_state_t missing_state = other_entry->state;
+    int missing_distance_from_solved = other_entry->distance_from_solved;
 
     other_entry->state = g1_state;
     other_entry->next_index = -1;
     other_entry->distance_from_solved = distance_from_solved;
 
-    _g1_table_insert(g1_table, missing_state, distance_from_solved);
+    bool result = _g1_table_insert(g1_table, missing_state, missing_distance_from_solved);
+    assert(result);
+
+    return true;
 }
 
 static int _g1_table_lookup(const g1_table_t* g1_table, g1_state_t g1_state) {
@@ -801,7 +815,9 @@ static int _g1_table_lookup(const g1_table_t* g1_table, g1_state_t g1_state) {
 }
 
 void _recursive_g1_fill_table(g1_table_t* g1_table, g1_state_t g1_state, move_e prev_base_move, int depth, int distance_from_solved) {
-    _g1_table_insert(g1_table, g1_state, distance_from_solved);
+    if (!_g1_table_insert(g1_table, g1_state, distance_from_solved)) {
+        return;
+    }
 
     if (depth <= 0) {
         return;
