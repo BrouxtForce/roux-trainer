@@ -78,7 +78,11 @@ static void* temp_realloc(size_t old_size, void* data, size_t size) {
         }
         assert(block->offset >= old_size);
         block->offset -= old_size;
-        return temp_alloc_from_block(block, size);
+
+        void* ptr = temp_alloc_from_block(block, size);
+        if (ptr != NULL) {
+            return ptr;
+        }
     }
 
     // The allocation needs to be relocated
@@ -267,6 +271,25 @@ const char* move_to_string(move_e move) {
     assert(false && "Invalid move");
 }
 
+const char* g_move_to_string(move_t move, allocator_e allocator) {
+    const char* base_move = move_to_string(move.move);
+    if (move.width == 1) {
+        return base_move;
+    }
+    if (move.width == 2) {
+        int length = strlen(base_move);
+        char* wide_move = alloc(length + 2, allocator, SOURCE_LOCATION);
+
+        wide_move[0] = base_move[0];
+        wide_move[1] = 'w';
+        memcpy(&wide_move[2], &base_move[1], length - 1);
+        wide_move[length + 1] = '\0';
+
+        return wide_move;
+    }
+    assert(false);
+}
+
 move_composition_t decompose_move(move_e move) {
     return (move_composition_t){
         .face_index = move / 3,
@@ -293,6 +316,39 @@ move_list_t generate_random_move_scramble(int length, allocator_e allocator) {
             array_append(scramble, random_move);
 
             prev_base_move = random_base_move;
+            break;
+        }
+    }
+
+    return scramble;
+}
+
+g_move_list_t generate_random_move_scramble_4(int length, allocator_e allocator) {
+    g_move_list_t scramble = { .allocator = allocator };
+
+    move_e prev_base_move = MOVE_NULL;
+    bool prev_was_wide = false;
+
+    for (int i = 0; i < length; i++) {
+        while (true) {
+            move_e base_move;
+            bool   is_wide = rand() % 2 == 0;
+            if (is_wide) {
+                base_move = 6 * (rand() % 3);
+            } else {
+                base_move = 3 * (rand() % 6);
+            }
+
+            if (base_move == prev_base_move && (prev_was_wide == is_wide || !prev_was_wide)) continue;
+            if (prev_base_move == MOVE_D && base_move == MOVE_U) continue;
+            if (prev_base_move == MOVE_B && base_move == MOVE_F) continue;
+            if (prev_base_move == MOVE_L && base_move == MOVE_R) continue;
+
+            move_t move = { .move = base_move + rand() % 3, .width = is_wide ? 2 : 1 };
+            array_append(scramble, move);
+
+            prev_base_move = base_move;
+            prev_was_wide  = is_wide;
             break;
         }
     }

@@ -3,7 +3,6 @@
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
-#include <math.h>
 #include "common.h"
 #include "visual_cube.h"
 
@@ -478,6 +477,8 @@ g0_table_t* g0_init_table(allocator_e allocator) {
     g0_table->magic = random_u64();
     _recursive_g0_fill_table(g0_table, G0_STATE_SOLVED, MOVE_NULL, G0_TABLE_DEPTH, 0);
 
+    assert(g0_table->count == G0_TABLE_SIZE);
+
     return g0_table;
 }
 
@@ -493,13 +494,15 @@ static void _search_g0_helper(const g0_table_t* g0_table, g0_state_t g0_state, m
         return;
     }
 
+    if (depth <= 0) return;
+
     int distance_from_solved = g0_table_lookup(g0_table, g0_state);
     if (distance_from_solved == -1) {
         // Best case scenario
         distance_from_solved = G0_TABLE_DEPTH + 1;
     }
 
-    if (depth <= 0 || depth < distance_from_solved) return;
+    if (depth < distance_from_solved) return;
 
     g0_state_t original_state = g0_state;
 
@@ -528,20 +531,30 @@ static void _search_g0_helper(const g0_table_t* g0_table, g0_state_t g0_state, m
     }
 }
 
-solution_list_t solve_g0(const g0_table_t* g0_table, g0_state_t g0_state, allocator_e allocator) {
-    move_list_t move_list = { .allocator = TEMP_ALLOCATOR };
+static solution_list_t _solve_g0_at_depth(const g0_table_t* g0_table, g0_state_t g0_state, int depth, allocator_e allocator) {
     solution_list_t solution_list = { .allocator = allocator };
+    move_list_t move_list = { .allocator = TEMP_ALLOCATOR };
+
+    _search_g0_helper(g0_table, g0_state, &move_list, &solution_list, depth);
+
+    return solution_list;
+}
+
+solution_list_t solve_g0(const g0_table_t* g0_table, g0_state_t g0_state, allocator_e allocator) {
+    if (g0_is_solved(g0_state)) {
+        solution_list_t out = { .allocator = allocator };
+        array_append(out, (move_list_t){});
+        return out;
+    }
 
     for (int depth = 1; depth <= 12; depth++) {
-        assert(move_list.size == 0);
-        _search_g0_helper(g0_table, g0_state, &move_list, &solution_list, depth);
-
-        if (solution_list.size > 0) {
-            break;
+        solution_list_t solutions = _solve_g0_at_depth(g0_table, g0_state, depth, allocator);
+        if (solutions.size > 0) {
+            return solutions;
         }
     }
 
-    return solution_list;
+    assert(false);
 }
 
 static bool g1_state_equals(g1_state_t left, g1_state_t right) {
@@ -607,6 +620,8 @@ g1_table_t* g1_init_table(allocator_e allocator) {
     g1_table->magic = random_u64();
     _recursive_g1_fill_table(g1_table, G1_STATE_SOLVED, MOVE_NULL, G1_TABLE_DEPTH, 0);
 
+    assert(g1_table->count == G1_TABLE_SIZE);
+
     return g1_table;
 }
 
@@ -622,15 +637,15 @@ static void _search_g1_helper(g1_table_t* g1_table, g1_state_t g1_state, move_li
         return;
     }
 
+    if (depth <= 0) return;
+
     int distance_from_solved = g1_table_lookup(g1_table, g1_state);
     if (distance_from_solved == -1) {
         // Best case scenario
         distance_from_solved = G1_TABLE_DEPTH + 1;
     }
 
-    if (depth <= 0 || depth < distance_from_solved) return;
-
-    if (depth <= 0) return;
+    if (depth < distance_from_solved) return;
 
     g1_state_t original_state = g1_state;
 
@@ -731,9 +746,8 @@ move_list_t solve_g0_g1(g0_table_t* g0_table, g1_table_t* g1_table, g0_state_t g
     move_list_t solution = { .allocator = allocator };
     array_reserve(solution, best_g0_solution.size + best_g1_solution.size);
 
-    memcpy(solution.data, best_g0_solution.data, best_g0_solution.size * sizeof(move_e));
-    memcpy(solution.data + best_g0_solution.size, best_g1_solution.data, best_g1_solution.size * sizeof(move_e));
-    solution.size = best_g0_solution.size + best_g1_solution.size;
+    array_append_array(solution, best_g0_solution);
+    array_append_array(solution, best_g1_solution);
 
     return solution;
 }

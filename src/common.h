@@ -27,8 +27,16 @@ typedef struct {
 
 #define array_append(array, element) \
     do { \
-        array_reserve(array, (array).size + 1); \
+        array_reserve((array), (array).size + 1); \
         (array).data[(array).size++] = (element); \
+    } while (false)
+
+#define array_append_array(array, other) \
+    do { \
+        static_assert(sizeof *(array).data == sizeof *(other).data); \
+        array_reserve((array), (array).size + (other).size); \
+        memcpy((array).data + (array).size, (other).data, (other.size) * sizeof *(other).data); \
+        (array).size += (other).size; \
     } while (false)
 
 #define array_pop(array) \
@@ -39,10 +47,12 @@ typedef struct {
 
 #define array_copy(src_array, copy_array) \
     do { \
-        (copy_array).data = alloc((src_array).size, (copy_array).allocator, SOURCE_LOCATION); \
+        static_assert(sizeof *(src_array).data == sizeof *(copy_array).data); \
+        size_t byte_length = (src_array).size * sizeof *(src_array).data; \
+        (copy_array).data = alloc(byte_length, (copy_array).allocator, SOURCE_LOCATION); \
         (copy_array).size = (src_array).size; \
         (copy_array).capacity = (src_array).capacity; \
-        memcpy((copy_array).data, (src_array).data, (src_array).size * sizeof *(copy_array).data); \
+        memcpy((copy_array).data, (src_array).data, byte_length); \
     } while (false)
 
 #define array_free(array) \
@@ -52,6 +62,13 @@ typedef struct {
         (array).size = 0; \
         (array).capacity = 0; \
     } while (false)
+
+#define ARRAY(TYPE) struct { \
+    TYPE* data; \
+    size_t size; \
+    size_t capacity; \
+    allocator_e allocator; \
+}
 
 static inline int byte_popcount(uint8_t value) {
     return __builtin_popcountg(value);
@@ -139,18 +156,12 @@ typedef struct {
     uint8_t width;
 } move_t;
 
-typedef struct {
-    move_e* data;
-    size_t size;
-    size_t capacity;
-    allocator_e allocator;
-} move_list_t;
+const char* g_move_to_string(move_t move, allocator_e allocator);
+
+typedef ARRAY(move_e)        move_list_t;
+typedef ARRAY(move_list_t)   solution_list_t;
+typedef ARRAY(move_t)        g_move_list_t;
+typedef ARRAY(g_move_list_t) g_solution_list_t;
 
 move_list_t generate_random_move_scramble(int length, allocator_e allocator);
-
-typedef struct {
-    move_list_t* data;
-    size_t size;
-    size_t capacity;
-    allocator_e allocator;
-} solution_list_t;
+g_move_list_t generate_random_move_scramble_4(int length, allocator_e allocator);

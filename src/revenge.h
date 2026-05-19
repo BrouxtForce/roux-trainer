@@ -16,9 +16,13 @@
 //
 // Then, to track parity, an 8-bit integer that flips between 0 and 1 is used.
 typedef struct {
-    uint8_t centers[6];
+    alignas(uint64_t) uint8_t centers[6];
     uint8_t parity;
-} revenge_g0_state_t;
+    uint8_t _padding;
+} revenge_g0_state_t ;
+
+static_assert(sizeof (revenge_g0_state_t) == sizeof (uint64_t));
+static_assert(alignof(revenge_g0_state_t) == alignof(uint64_t));
 
 // NOTE: Because the 4x4 does not have any fixed centers, there are multiple possible solved states
 static const revenge_g0_state_t REVENGE_G0_STATE_SOLVED = {
@@ -33,10 +37,14 @@ static const revenge_g0_state_t REVENGE_G0_STATE_SOLVED = {
     .parity = 0
 };
 
+static const revenge_g0_state_t REVENGE_G0_STATE_NULL = {};
+
 void revenge_g0_move_face_cw(revenge_g0_state_t* state, face_index_e face);
 void revenge_g0_move_uw(revenge_g0_state_t* state);
 void revenge_g0_move_fw(revenge_g0_state_t* state);
 void revenge_g0_move_rw(revenge_g0_state_t* state);
+
+void revenge_g0_execute_move(revenge_g0_state_t* state, move_t move);
 
 // The second phase is taking the result of the first phase and bringing it to 3x3 stage. The only
 // thing to be careful about here is that we cannot have PLL parity going into 3x3 stage.
@@ -89,3 +97,14 @@ void revenge_g1_move_fw(revenge_g1_state_t* state);
 void revenge_g1_move_rw(revenge_g1_state_t* state);
 
 void revenge_write_visual_cube_state(big_visual_cube_state_t* state, revenge_g0_state_t revenge_g0_state, revenge_g1_state_t revenge_g1_state, g0_state_t g0_state, g1_state_t g1_state);
+
+#define REVENGE_G0_TABLE_SIZE 1753769
+#define REVENGE_G0_TABLE_DEPTH 6
+
+typedef struct revenge_g0_table_t revenge_g0_table_t;
+
+revenge_g0_table_t* revenge_g0_init_table(allocator_e allocator);
+
+bool revenge_g0_is_solved(revenge_g0_state_t state);
+
+g_solution_list_t solve_revenge_g0(revenge_g0_table_t* table, revenge_g0_state_t state, allocator_e allocator);

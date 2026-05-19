@@ -174,6 +174,33 @@ void run_kociemba() {
     free_alloc(g1_table, MAIN_ALLOCATOR);
 }
 
+void run_revenge() {
+    revenge_g0_table_t* g0_table = revenge_g0_init_table(MAIN_ALLOCATOR);
+    printf("Initialized revenge g0 table\n");
+
+    revenge_g0_state_t g0_state = REVENGE_G0_STATE_SOLVED;
+
+    g_move_list_t scramble = generate_random_move_scramble_4(60, TEMP_ALLOCATOR);
+    printf("Scramble:　");
+    for (size_t i = 0; i < scramble.size; i++) {
+        printf("%s ", g_move_to_string(scramble.data[i], TEMP_ALLOCATOR));
+        revenge_g0_execute_move(&g0_state, scramble.data[i]);
+    }
+    printf("\n");
+
+    g_solution_list_t solutions = solve_revenge_g0(g0_table, g0_state, TEMP_ALLOCATOR);
+    printf("Num solutions: %zu\n", solutions.size);
+    for (size_t i = 0; i < solutions.size; i++) {
+        g_move_list_t solution = solutions.data[i];
+        for (size_t i = 0; i < solution.size; i++) {
+            printf("%s ", g_move_to_string(solution.data[i], TEMP_ALLOCATOR));
+        }
+        printf("\n");
+    }
+
+    free_alloc(g0_table, MAIN_ALLOCATOR);
+}
+
 int main(int argc, char** argv) {
     srand((unsigned)time(NULL));
 
@@ -192,6 +219,10 @@ int main(int argc, char** argv) {
     }
     if (argc >= 2 && strcmp(argv[1], "kociemba") == 0) {
         run_kociemba();
+        return 0;
+    }
+    if (argc >= 2 && strcmp(argv[1], "revenge") == 0) {
+        run_revenge();
         return 0;
     }
 
