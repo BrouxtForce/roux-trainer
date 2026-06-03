@@ -24,6 +24,10 @@ double timer_duration(timer_t timer) {
     return (double)(timer.end - timer.start) / CLOCKS_PER_SEC;
 }
 
+double timer_duration_ms(timer_t timer) {
+    return 1000.0 * timer_duration(timer);
+}
+
 move_t consume_next_move(const char** alg_string) {
     while (true) {
         char next_char = (*alg_string)[0];
@@ -224,6 +228,9 @@ void kociemba_test() {
 
     int num_scrambles = 1000;
 
+    distribution_t solve_time_distribution = { .allocator = MAIN_ALLOCATOR };
+    distribution_t movecount_distribution = { .allocator = MAIN_ALLOCATOR };
+
     uint32_t total_moves = 0;
     timer_t timer;
     timer_start(&timer);
@@ -237,10 +244,18 @@ void kociemba_test() {
             g1_execute_move(&g1_state, scramble.data[i]);
         }
 
+        timer_t solve_timer;
+        timer_start(&solve_timer);
         move_list_t move_list = solve_g0_g1(g0_table, g1_table, g0_state, g1_state, TEMP_ALLOCATOR);
+        timer_stop(&solve_timer);
+
+        distribution_add(&solve_time_distribution, (int)timer_duration_ms(solve_timer));
+
         printf("Solved %i scrambles\r", i + 1);
         fflush(stdout);
+
         total_moves += move_list.size;
+        distribution_add(&movecount_distribution, move_list.size);
 
         for (size_t i = 0; i < move_list.size; i++) {
             g0_execute_move(&g0_state, move_list.data[i]);
@@ -258,6 +273,15 @@ void kociemba_test() {
 
     printf("Average time per solve:  %fs\n", average_time);
     printf("Average moves per solve: %fs\n", average_movecount);
+
+    printf("\nMovecount Distribution (HTM):\n");
+    distribution_print(&movecount_distribution, 50);
+
+    printf("\nSolve time distribution (ms):\n");
+    distribution_print(&solve_time_distribution, 50);
+
+    array_free(solve_time_distribution);
+    array_free(movecount_distribution);
 
     free_alloc(g0_table, MAIN_ALLOCATOR);
     free_alloc(g1_table, MAIN_ALLOCATOR);

@@ -165,3 +165,17 @@ typedef ARRAY(g_move_list_t) g_solution_list_t;
 
 move_list_t generate_random_move_scramble(int length, allocator_e allocator);
 g_move_list_t generate_random_move_scramble_4(int length, allocator_e allocator);
+
+typedef struct {
+    int value;
+    int count;
+} distribution_node_t;
+
+typedef ARRAY(distribution_node_t) distribution_t;
+
+// NOTE: This function takes O(n) time for n=distribution.size
+// TODO: Improve the time complexity
+void distribution_add(distribution_t* distribution, int value);
+
+// NOTE: This sorts the array
+void distribution_print(distribution_t* distribution, int bar_length);

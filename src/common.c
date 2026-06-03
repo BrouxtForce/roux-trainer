@@ -355,3 +355,48 @@ g_move_list_t generate_random_move_scramble_4(int length, allocator_e allocator)
 
     return scramble;
 }
+
+void distribution_add(distribution_t* distribution, int value) {
+    for (size_t i = 0; i < distribution->size; i++) {
+        if (distribution->data[i].value == value) {
+            distribution->data[i].count++;
+            return;
+        }
+    }
+
+    distribution_node_t node = {
+        .value = value,
+        .count = 1
+    };
+    array_append(*distribution, node);
+}
+
+int distribution_node_compare(const void* left, const void* right) {
+    const distribution_node_t* a = left;
+    const distribution_node_t* b = right;
+
+    return a->value - b->value;
+}
+
+void distribution_print(distribution_t* distribution, int bar_length) {
+    if (distribution->size == 0) return;
+
+    char bar_buffer[bar_length] = {};
+    memset(bar_buffer, '#', bar_length);
+
+    qsort(distribution->data, distribution->size, sizeof(*distribution->data), distribution_node_compare);
+
+    int total_count = 0;
+    for (size_t i = 0; i < distribution->size; i++) {
+        total_count += distribution->data[i].count;
+    }
+
+    for (size_t i = 0; i < distribution->size; i++) {
+        distribution_node_t node = distribution->data[i];
+
+        int bar_size = node.count * bar_length / total_count;
+
+        // TODO: Make left number width dynamic depending on the input distribution
+        printf("%4i: %.*s %i\n", node.value, bar_size, bar_buffer, node.count);
+    }
+}
