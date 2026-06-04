@@ -12,6 +12,7 @@
 
 #include <stdint.h>
 #include <assert.h>
+#include <stddef.h>
 
 #if !defined(HASH_TABLE_NAME) || !defined(STATE_TYPE) || !defined(STATE_EQUALS) || \
     !defined(STATE_TO_U64)    || !defined(STATE_NULL) || !defined(HASH_TABLE_SIZE)
@@ -54,7 +55,7 @@ HASH_TABLE_FUNCTION(int, get_next_free, HASH_TABLE_TYPE* table) {
         }
         table->next_free++;
     }
-    assert(false);
+    unreachable();
 }
 
 HASH_TABLE_FUNCTION(int, get_index, STATE_TYPE state, uint64_t magic) {
@@ -132,7 +133,7 @@ HASH_TABLE_FUNCTION(bool, insert, HASH_TABLE_TYPE* table, STATE_TYPE state, int 
     other_entry->next_index = -1;
     other_entry->distance_from_solved = distance_from_solved;
 
-    bool result = HASH_TABLE_CALL(insert, table, missing_state, missing_distance_from_solved);
+    [[maybe_unused]] bool result = HASH_TABLE_CALL(insert, table, missing_state, missing_distance_from_solved);
     assert(result);
 
     return true;

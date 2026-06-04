@@ -116,7 +116,7 @@ static void record_allocation(void* ptr, size_t size, source_location_t caller_l
     array_append(allocation_records, allocation_record);
 }
 
-static void record_reallocation(size_t old_size, void* old_ptr, size_t new_size, void* new_ptr, source_location_t caller_location) {
+static void record_reallocation([[maybe_unused]] size_t old_size, void* old_ptr, size_t new_size, void* new_ptr, source_location_t caller_location) {
     if (old_ptr == NULL) {
         record_allocation(new_ptr, new_size, caller_location);
         return;
@@ -287,7 +287,9 @@ const char* g_move_to_string(move_t move, allocator_e allocator) {
 
         return wide_move;
     }
+
     assert(false);
+    return "[INVALID MOVE]";
 }
 
 move_composition_t decompose_move(move_e move) {

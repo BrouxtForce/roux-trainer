@@ -382,4 +382,5 @@ g_solution_list_t solve_revenge_g0(revenge_g0_table_t* table, revenge_g0_state_t
     }
 
     assert(false);
+    return (g_solution_list_t){};
 }

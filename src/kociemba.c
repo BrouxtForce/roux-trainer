@@ -425,11 +425,6 @@ void g1_execute_move(g1_state_t* g1_state, move_e move) {
     }
 }
 
-static bool g0_state_equals(g0_state_t left, g0_state_t right) {
-    assert(left._padding == 0 && right._padding == 0);
-    return memcmp(&left, &right, sizeof(g0_state_t)) == 0;
-}
-
 // TODO: This function could be faster if all of the edges were stored in one uint32_t
 static int g0_get_eo_index(g0_state_t state) {
     int edges =
@@ -645,6 +640,7 @@ solution_list_t solve_g0(const g0_table_t* g0_table, g0_state_t g0_state, alloca
     }
 
     assert(false);
+    return (solution_list_t){};
 }
 
 static bool g1_state_equals(g1_state_t left, g1_state_t right) {
@@ -802,6 +798,7 @@ solution_list_t solve_g1(g1_table_t* g1_table, g1_state_t g1_state, allocator_e 
     }
 
     assert(false);
+    return (solution_list_t){};
 }
 
 move_list_t solve_g0_g1(g0_table_t* g0_table, g1_table_t* g1_table, g0_state_t g0_state, g1_state_t g1_state, allocator_e allocator) {

@@ -2,6 +2,7 @@
 #include <string.h>
 #include <assert.h>
 #include <time.h>
+#include <stddef.h>
 
 #include "visual_cube.h"
 #include "kociemba.h"
@@ -68,7 +69,7 @@ move_t consume_next_move(const char** alg_string) {
         case 'L': return (move_t){ .move = MOVE_L + move_enum_offset, .width = width };
     }
 
-    assert(false);
+    unreachable();
 }
 
 void g0_g1_execute_alg_string(g0_state_t* g0_state, g1_state_t* g1_state, const char* alg_string) {

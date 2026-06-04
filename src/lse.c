@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
+#include <stddef.h>
 #include "common.h"
 
 #define LSE_STATE_CORNER_STATE_MASK      0b00000011
@@ -335,7 +336,7 @@ face_index_e lse_state_get_edge_face(int edge_state, bool is_misoriented) {
         case LSE_STATE_EDGE_INDEX_DB:
             return should_return_oriented ? FACE_INDEX_D : FACE_INDEX_B;
     }
-    assert(false);
+    unreachable();
 }
 
 face_index_e lse_state_get_center_face(int center_state, int target_center) {
@@ -345,7 +346,7 @@ face_index_e lse_state_get_center_face(int center_state, int target_center) {
         case 2: return FACE_INDEX_D;
         case 3: return FACE_INDEX_F;
     }
-    assert(false);
+    unreachable();
 }
 
 face_index_e lse_state_get_corner_front_face(int corner_state, int target_corner) {
@@ -355,7 +356,7 @@ face_index_e lse_state_get_corner_front_face(int corner_state, int target_corner
         case 2: return FACE_INDEX_B;
         case 3: return FACE_INDEX_L;
     }
-    assert(false);
+    unreachable();
 }
 
 void visual_cube_state_write_lse_state_edge(visual_cube_state_t* visual_cube_state, visual_cube_edge_e edge, int state) {
