@@ -194,7 +194,7 @@ static void revenge_g1_wing_get_primary_and_secondary_stickers(wing_index_e wing
 }
 
 void revenge_write_visual_cube_state(big_visual_cube_state_t* state, revenge_g0_state_t revenge_g0_state, revenge_g1_state_t revenge_g1_state, g0_state_t g0_state, g1_state_t g1_state) {
-    for (int face = 0; face < 6; face++) {
+    for (face_index_e face = 0; face < 6; face++) {
         face_index_e a0 =  revenge_g0_state.centers[face] >> 6;
         face_index_e b0 = (revenge_g0_state.centers[face] >> 4) & 0b11;
         face_index_e c0 = (revenge_g0_state.centers[face] >> 2) & 0b11;
@@ -211,7 +211,7 @@ void revenge_write_visual_cube_state(big_visual_cube_state_t* state, revenge_g0_
         big_visual_cube_state_write_center(state, face, 3, 2*c0 + c1);
     }
 
-    for (int wing = 0; wing < 24; wing++) {
+    for (wing_index_e wing = 0; wing < 24; wing++) {
         face_index_e primary_face, secondary_face;
         revenge_g1_wing_get_primary_and_secondary_stickers(wing, &primary_face, &secondary_face);
 
@@ -250,7 +250,7 @@ void _recursive_revenge_g0_fill_table(revenge_g0_table_t* g0_table, revenge_g0_s
     }
 
     revenge_g0_state_t original_state = g0_state;
-    for (int face = 0; face < 6; face++) {
+    for (face_index_e face = 0; face < 6; face++) {
         move_e base_move = 3 * face;
 
         // TODO: Move pruning
@@ -329,7 +329,7 @@ static void _search_revenge_g0_helper(revenge_g0_table_t* table, revenge_g0_stat
 
     revenge_g0_state_t original_state = state;
 
-    for (int face = 0; face < 6; face++) {
+    for (face_index_e face = 0; face < 6; face++) {
         move_e base_move = 3 * face;
 
         // TODO: Move pruning
@@ -338,7 +338,7 @@ static void _search_revenge_g0_helper(revenge_g0_table_t* table, revenge_g0_stat
         for (int j = 0; j < 3; j++) {
             revenge_g0_move_face_cw(&state, face);
 
-            move_t move = { .move = base_move + j, .width = 1 };
+            move_t move = { .move = base_move + (move_e)j, .width = 1 };
 
             array_append(*move_list, move);
             _search_revenge_g0_helper(table, state, move_list, solution_list, depth - 1);
@@ -354,7 +354,7 @@ static void _search_revenge_g0_helper(revenge_g0_table_t* table, revenge_g0_stat
                 default: continue;
             }
 
-            move_t move = { .move = base_move + j, .width = 2 };
+            move_t move = { .move = base_move + (move_e)j, .width = 2 };
 
             array_append(*move_list, move);
             _search_revenge_g0_helper(table, state, move_list, solution_list, depth - 1);

@@ -377,7 +377,7 @@ static move_e _get_base_move(move_e move) {
 
 static void _decompose_move(move_e move, move_e* base_move, int* count) {
     *count     = move % 3;
-    *base_move = move - *count;
+    *base_move = move - (move_e)*count;
     (*count)++;
 }
 
@@ -515,11 +515,11 @@ void _recursive_g0_fill_table(g0_table_t* g0_table, g0_state_t g0_state, move_e 
 
     bool eo_insert = false, co_insert = false;
     if (distance_from_solved < g0_table->eo_and_eslice_table[eo_index]) {
-        g0_table->eo_and_eslice_table[eo_index] = distance_from_solved;
+        g0_table->eo_and_eslice_table[eo_index] = (uint8_t)distance_from_solved;
         eo_insert = true;
     }
     if (distance_from_solved < g0_table->co_and_eslice_table[co_index]) {
-        g0_table->co_and_eslice_table[co_index] = distance_from_solved;
+        g0_table->co_and_eslice_table[co_index] = (uint8_t)distance_from_solved;
         co_insert = true;
     }
 
@@ -533,7 +533,7 @@ void _recursive_g0_fill_table(g0_table_t* g0_table, g0_state_t g0_state, move_e 
 
     g0_state_t original_state = g0_state;
     for (int i = 0; i < 6; i++) {
-        move_e base_move = 3 * i;
+        move_e base_move = (move_e)(3 * i);
 
         if (_should_prune_move(prev_base_move, base_move)) {
             continue;
@@ -591,8 +591,8 @@ static void _search_g0_helper(const g0_table_t* g0_table, g0_state_t g0_state, m
 
     g0_state_t original_state = g0_state;
 
-    for (int i = 0; i < 6; i++) {
-        move_e base_move = 3 * i;
+    for (face_index_e face = 0; face < 6; face++) {
+        move_e base_move = 3 * face;
 
         if (move_list->size > 0 && _should_prune_move(_get_base_move(move_list->data[move_list->size - 1]), base_move)) {
             continue;
@@ -600,7 +600,7 @@ static void _search_g0_helper(const g0_table_t* g0_table, g0_state_t g0_state, m
 
         g0_state = original_state;
         for (int j = 0; j < 3; j++) {
-            array_append(*move_list, base_move + j);
+            array_append(*move_list, base_move + (move_e)j);
             switch (base_move) {
                 case MOVE_U: g0_move_u(&g0_state); break;
                 case MOVE_D: g0_move_d(&g0_state); break;
@@ -665,8 +665,8 @@ void _recursive_g1_fill_table(g1_table_t* g1_table, g1_state_t g1_state, move_e 
     }
 
     g1_state_t original_state = g1_state;
-    for (int i = 0; i < 6; i++) {
-        move_e base_move = 3 * i;
+    for (face_index_e face = 0; face < 6; face++) {
+        move_e base_move = 3 * face;
 
         if (_should_prune_move(prev_base_move, base_move)) {
             continue;
@@ -688,7 +688,7 @@ void _recursive_g1_fill_table(g1_table_t* g1_table, g1_state_t g1_state, move_e 
             continue;
         }
 
-        for (int j = 0; j < 3; j++) {
+        for (int i = 0; i < 3; i++) {
             switch (base_move) {
                 case MOVE_U: g1_move_u(&g1_state); break;
                 case MOVE_D: g1_move_d(&g1_state); break;
@@ -735,8 +735,8 @@ static void _search_g1_helper(g1_table_t* g1_table, g1_state_t g1_state, move_li
 
     g1_state_t original_state = g1_state;
 
-    for (int i = 0; i < 6; i++) {
-        move_e base_move = 3 * i;
+    for (face_index_e face = 0; face < 6; face++) {
+        move_e base_move = 3 * face;
 
         if (move_list->size > 0 && _should_prune_move(_get_base_move(move_list->data[move_list->size - 1]), base_move)) {
             continue;
@@ -760,8 +760,8 @@ static void _search_g1_helper(g1_table_t* g1_table, g1_state_t g1_state, move_li
             continue;
         }
 
-        for (int j = 0; j < 3; j++) {
-            array_append(*move_list, base_move + j);
+        for (int i = 0; i < 3; i++) {
+            array_append(*move_list, base_move + (move_e)i);
             switch (base_move) {
                 case MOVE_U: g1_move_u(&g1_state); break;
                 case MOVE_D: g1_move_d(&g1_state); break;

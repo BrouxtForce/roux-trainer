@@ -235,7 +235,7 @@ void temp_allocator_free_all() {
 
 // TODO: Better random number generation
 uint64_t random_u64() {
-    uint64_t a = rand(), b = rand(), c = rand();
+    uint64_t a = (uint64_t)rand(), b = (uint64_t)rand(), c = (uint64_t)rand();
     return (a << 42) | (b << 21) | c;
 }
 
@@ -277,7 +277,7 @@ const char* g_move_to_string(move_t move, allocator_e allocator) {
         return base_move;
     }
     if (move.width == 2) {
-        int length = strlen(base_move);
+        size_t length = strlen(base_move);
         char* wide_move = alloc(length + 2, allocator, SOURCE_LOCATION);
 
         wide_move[0] = base_move[0];
@@ -307,14 +307,14 @@ move_list_t generate_random_move_scramble(int length, allocator_e allocator) {
     for (int i = 0; i < length; i++) {
         // TODO: Better random number generation
         while (true) {
-            move_e random_base_move = 3 * (rand() % 6);
+            move_e random_base_move = (move_e)(3 * (rand() % 6));
 
             if (random_base_move == prev_base_move) continue;
             if (prev_base_move == MOVE_D && random_base_move == MOVE_U) continue;
             if (prev_base_move == MOVE_B && random_base_move == MOVE_F) continue;
             if (prev_base_move == MOVE_L && random_base_move == MOVE_R) continue;
 
-            move_e random_move = random_base_move + rand() % 3;
+            move_e random_move = (move_e)(random_base_move + rand() % 3);
             array_append(scramble, random_move);
 
             prev_base_move = random_base_move;
@@ -336,9 +336,9 @@ g_move_list_t generate_random_move_scramble_4(int length, allocator_e allocator)
             move_e base_move;
             bool   is_wide = rand() % 2 == 0;
             if (is_wide) {
-                base_move = 6 * (rand() % 3);
+                base_move = (move_e)(6 * (rand() % 3));
             } else {
-                base_move = 3 * (rand() % 6);
+                base_move = (move_e)(3 * (rand() % 6));
             }
 
             if (base_move == prev_base_move && (prev_was_wide == is_wide || !prev_was_wide)) continue;
@@ -346,7 +346,7 @@ g_move_list_t generate_random_move_scramble_4(int length, allocator_e allocator)
             if (prev_base_move == MOVE_B && base_move == MOVE_F) continue;
             if (prev_base_move == MOVE_L && base_move == MOVE_R) continue;
 
-            move_t move = { .move = base_move + rand() % 3, .width = is_wide ? 2 : 1 };
+            move_t move = { .move = (move_e)(base_move + rand() % 3), .width = is_wide ? 2 : 1 };
             array_append(scramble, move);
 
             prev_base_move = base_move;
@@ -384,7 +384,7 @@ void distribution_print(distribution_t* distribution, int bar_length) {
     if (distribution->size == 0) return;
 
     char bar_buffer[bar_length] = {};
-    memset(bar_buffer, '#', bar_length);
+    memset(bar_buffer, '#', (size_t)bar_length);
 
     qsort(distribution->data, distribution->size, sizeof(*distribution->data), distribution_node_compare);
 

@@ -144,8 +144,8 @@ void get_visual_cube_state_string(const visual_cube_state_t* visual_cube_state, 
 
 void big_visual_cube_state_init(big_visual_cube_state_t* state, int n, allocator_e allocator) {
     int stickers_per_face = n * n;
-    face_index_e* all_stickers = alloc(6 * stickers_per_face * sizeof(face_index_e), allocator, SOURCE_LOCATION);
-    for (int face = 0; face < 6; face++) {
+    face_index_e* all_stickers = alloc(6 * (size_t)stickers_per_face * sizeof(face_index_e), allocator, SOURCE_LOCATION);
+    for (face_index_e face = 0; face < 6; face++) {
         face_index_e* stickers = all_stickers + (face * stickers_per_face);
         for (int j = 0; j < stickers_per_face; j++) {
             stickers[j] = face;
@@ -223,8 +223,10 @@ void draw_big_visual_cube_state(const big_visual_cube_state_t* big_visual_cube_s
     int n = big_visual_cube_state->n;
 
     int num_spaces = 2*n + 3;
+    assert(num_spaces > 0);
+
     char spaces[num_spaces];
-    memset(&spaces, ' ', num_spaces - 1);
+    memset(&spaces, ' ', (size_t)num_spaces - 1);
     spaces[num_spaces - 1] = '\0';
 
     for (int y = 0; y < n; y++) {
@@ -265,7 +267,7 @@ void draw_big_visual_cube_state(const big_visual_cube_state_t* big_visual_cube_s
 
 char* get_big_visual_cube_state_string(const big_visual_cube_state_t* state, allocator_e allocator) {
     const int buffer_size = 6 * state->n * state->n + 1;
-    char* buffer = alloc(buffer_size, allocator, SOURCE_LOCATION);
+    char* buffer = alloc((size_t)buffer_size, allocator, SOURCE_LOCATION);
     int   buffer_index = 0;
 
     face_index_e face_order[6] = {

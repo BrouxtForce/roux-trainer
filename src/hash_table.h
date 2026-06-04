@@ -51,7 +51,7 @@ typedef struct HASH_TABLE_TYPE {
 HASH_TABLE_FUNCTION(int, get_next_free, HASH_TABLE_TYPE* table) {
     while (table->next_free < HASH_TABLE_SIZE) {
         if (STATE_EQUALS(table->entries[table->next_free].state, STATE_NULL)) {
-            return table->next_free++;
+            return (int)table->next_free++;
         }
         table->next_free++;
     }

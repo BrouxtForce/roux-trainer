@@ -42,10 +42,10 @@ move_t consume_next_move(const char** alg_string) {
         (*alg_string)++;
     }
 
-    char move_char        = (*alg_string)[0];
-    char move_modifier    = (*alg_string)[1];
-    int  move_enum_offset = 0;
-    int  width = 1;
+    char    move_char        = (*alg_string)[0];
+    char    move_modifier    = (*alg_string)[1];
+    uint8_t move_enum_offset = 0;
+    uint8_t width            = 1;
 
     if (move_modifier == 'w') {
         width = 2;
@@ -256,7 +256,7 @@ void kociemba_test() {
         fflush(stdout);
 
         total_moves += move_list.size;
-        distribution_add(&movecount_distribution, move_list.size);
+        distribution_add(&movecount_distribution, (int)move_list.size);
 
         for (size_t i = 0; i < move_list.size; i++) {
             g0_execute_move(&g0_state, move_list.data[i]);

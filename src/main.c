@@ -29,7 +29,7 @@ void enter_raw_mode() {
         is_initial_termios_state_initialized = true;
     }
 
-    raw.c_lflag &= ~(ECHO | ICANON);
+    raw.c_lflag &= (tcflag_t)~(ECHO | ICANON);
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 }
 
