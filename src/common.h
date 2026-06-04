@@ -98,6 +98,14 @@ static inline uint16_t rotate_right_u16(uint16_t value, uint16_t amount) {
     return __builtin_rotateright16(value, amount);
 }
 
+static inline int clz_u32(uint32_t value) {
+    return __builtin_clz(value);
+}
+
+static inline int popcount_u32(uint32_t value) {
+    return __builtin_popcount(value);
+}
+
 typedef enum {
     INVALID_ALLOCATOR,
 
@@ -118,6 +126,10 @@ void free_alloc(void* ptr, allocator_e allocator);
 void temp_allocator_free_all();
 
 uint64_t random_u64();
+
+inline static int32_t max_i32(int32_t a, int32_t b) {
+    return a > b ? a : b;
+}
 
 inline static uint64_t max_u64(uint64_t a, uint64_t b) {
     return a > b ? a : b;

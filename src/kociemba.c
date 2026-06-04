@@ -7,6 +7,7 @@
 #include "visual_cube.h"
 
 #define G0_EDGE_PACKING_ORIENTATION_MASK 0b01010101
+#define G0_EDGE_PACKING_MIDDLE_MASK      0b10101010
 
 #define G0_CORNER_PACKING_MIDDLE_TWO_MASK 0b0000111111110000
 #define G0_CORNER_PACKING_OUTER_TWO_MASK 0b1111000000001111
@@ -429,16 +430,105 @@ static bool g0_state_equals(g0_state_t left, g0_state_t right) {
     return memcmp(&left, &right, sizeof(g0_state_t)) == 0;
 }
 
-#define HASH_TABLE_NAME g0_table
-#define STATE_TYPE g0_state_t
-#define STATE_EQUALS(a, b) g0_state_equals(a, b)
-#define STATE_TO_U64(state) (*(uint64_t*)&state)
-#define STATE_NULL G0_STATE_NULL
-#define HASH_TABLE_SIZE G0_TABLE_SIZE
-#include "hash_table.h"
+// TODO: This function could be faster if all of the edges were stored in one uint32_t
+static int g0_get_eo_index(g0_state_t state) {
+    int edges =
+        ((int)(state.ub_ur_uf_ul_edges & G0_EDGE_PACKING_ORIENTATION_MASK) << 0) |
+        ((int)(state.df_dr_db_dl_edges & G0_EDGE_PACKING_ORIENTATION_MASK) << 8) |
+        ((int)(state.bl_fr_br_fl_edges & G0_EDGE_PACKING_ORIENTATION_MASK) << 16);
+
+    int index = (edges | (edges >> 11)) & 0b11111111111;
+
+    assert(index >= 0 && index < 2048);
+    return index;
+}
+
+// This function takes a 16-bit unsigned integer which holds 4 4-bit ternary (base-3) digits, and
+// converts it to a binary value.
+static int _internal_from_ternary_u16(uint16_t senary) {
+    int a =  senary >> 12;
+    int b = (senary >> 8) & 0b1111;
+    int c = (senary >> 4) & 0b1111;
+    int d = (senary     ) & 0b1111;
+
+    return 3*(3*(3*a + b) + c) + d;
+}
+
+static int g0_get_co_index(g0_state_t state) {
+    int u_corners = _internal_from_ternary_u16(state.ufl_ufr_ubr_ubl_corners);
+    int d_corners = _internal_from_ternary_u16(state.dfr_dfl_dbl_dbr_corners & 0b0000111111111111);
+
+    int index = 81*d_corners + u_corners;
+
+    assert(index >= 0 && index < 2187);
+    return index;
+}
+
+static int calc_eslice_index(uint32_t num) {
+    assert(popcount_u32(num) == 4);
+
+    int index_0 = 31 - clz_u32(num);
+    num &= ~((uint32_t)1 << index_0);
+
+    int index_1 = 31 - clz_u32(num);
+    num &= ~((uint32_t)1 << index_1);
+
+    int index_2 = 31 - clz_u32(num);
+    num &= ~((uint32_t)1 << index_2);
+
+    int index_3 = 31 - clz_u32(num);
+
+    int result_0 = index_0 * (index_0 - 1) * (index_0 - 2) * (index_0 - 3) / 24;
+    int result_1 = index_1 * (index_1 - 1) * (index_1 - 2) / 6;
+    int result_2 = index_2 * (index_2 - 1) / 2;
+    int result_3 = index_3;
+
+    return result_0 + result_1 + result_2 + result_3;
+}
+
+// TODO: This function could be faster if all of the edges were stored in one uint32_t
+static int g0_get_eslice_index(g0_state_t state) {
+    uint32_t edges =
+        ((uint32_t)(state.ub_ur_uf_ul_edges & G0_EDGE_PACKING_MIDDLE_MASK) << 0) |
+        ((uint32_t)(state.df_dr_db_dl_edges & G0_EDGE_PACKING_MIDDLE_MASK) << 8) |
+        ((uint32_t)(state.bl_fr_br_fl_edges & G0_EDGE_PACKING_MIDDLE_MASK) << 16);
+    edges = (edges | (edges >> 13)) & 0b111111111111;
+
+    return calc_eslice_index(edges);
+}
+
+static int g0_get_eo_and_eslice_index(g0_state_t state, int eslice_index) {
+    int eo_index     = g0_get_eo_index(state);
+    int index        = G0_NUM_ESLICE_COMBINATIONS * eo_index + eslice_index;
+
+    assert(index >= 0 && index < G0_EO_AND_ESLICE_TABLE_SIZE);
+    return index;
+}
+
+static int g0_get_co_and_eslice_index(g0_state_t state, int eslice_index) {
+    int co_index     = g0_get_co_index(state);
+    int index        = G0_NUM_ESLICE_COMBINATIONS * co_index + eslice_index;
+
+    assert(index >= 0 && index < G0_CO_AND_ESLICE_TABLE_SIZE);
+    return index;
+}
 
 void _recursive_g0_fill_table(g0_table_t* g0_table, g0_state_t g0_state, move_e prev_base_move, int depth, int distance_from_solved) {
-    if (!g0_table_insert(g0_table, g0_state, distance_from_solved)) {
+    int eslice_index = g0_get_eslice_index(g0_state);
+    int eo_index = g0_get_eo_and_eslice_index(g0_state, eslice_index);
+    int co_index = g0_get_co_and_eslice_index(g0_state, eslice_index);
+
+    bool eo_insert = false, co_insert = false;
+    if (distance_from_solved < g0_table->eo_and_eslice_table[eo_index]) {
+        g0_table->eo_and_eslice_table[eo_index] = distance_from_solved;
+        eo_insert = true;
+    }
+    if (distance_from_solved < g0_table->co_and_eslice_table[co_index]) {
+        g0_table->co_and_eslice_table[co_index] = distance_from_solved;
+        co_insert = true;
+    }
+
+    if (!eo_insert && !co_insert) {
         return;
     }
 
@@ -471,13 +561,15 @@ void _recursive_g0_fill_table(g0_table_t* g0_table, g0_state_t g0_state, move_e 
 }
 
 g0_table_t* g0_init_table(allocator_e allocator) {
+    // In my tests, I've found for the specific tables that I'm generating below that the maximum
+    // distance from solved for any of these states is 9. This means that we can just set the default
+    // value for each result in the table to be 9, and only search up to depth 8 to fill the table.
+    static const int MAX_DISTANCE_FROM_SOLVED = 9;
+
     g0_table_t* g0_table = alloc(sizeof(g0_table_t), allocator, SOURCE_LOCATION);
-    memset(g0_table, 0, sizeof(*g0_table));
+    memset(g0_table, MAX_DISTANCE_FROM_SOLVED, sizeof(*g0_table));
 
-    g0_table->magic = random_u64();
-    _recursive_g0_fill_table(g0_table, G0_STATE_SOLVED, MOVE_NULL, G0_TABLE_DEPTH, 0);
-
-    assert(g0_table->count == G0_TABLE_SIZE);
+    _recursive_g0_fill_table(g0_table, G0_STATE_SOLVED, MOVE_NULL, MAX_DISTANCE_FROM_SOLVED - 1, 0);
 
     return g0_table;
 }
@@ -487,22 +579,20 @@ bool g0_is_solved(g0_state_t g0_state) {
 }
 
 static void _search_g0_helper(const g0_table_t* g0_table, g0_state_t g0_state, move_list_t* move_list, solution_list_t* solution_list, int depth) {
-    if (g0_is_solved(g0_state)) {
+    int eslice_index = g0_get_eslice_index(g0_state);
+    int distance_from_solved = max_i32(
+        g0_table->eo_and_eslice_table[g0_get_eo_and_eslice_index(g0_state, eslice_index)],
+        g0_table->co_and_eslice_table[g0_get_co_and_eslice_index(g0_state, eslice_index)]
+    );
+
+    if (depth < distance_from_solved) return;
+
+    if (distance_from_solved == 0) {
         move_list_t copy_move_list = { .allocator = solution_list->allocator };
         array_copy(*move_list, copy_move_list);
         array_append(*solution_list, copy_move_list);
         return;
     }
-
-    if (depth <= 0) return;
-
-    int distance_from_solved = g0_table_lookup(g0_table, g0_state);
-    if (distance_from_solved == -1) {
-        // Best case scenario
-        distance_from_solved = G0_TABLE_DEPTH + 1;
-    }
-
-    if (depth < distance_from_solved) return;
 
     g0_state_t original_state = g0_state;
 

@@ -101,10 +101,17 @@ void g0_g1_state_write_visual_cube_state(visual_cube_state_t* visual_cube_state,
 void g0_execute_move(g0_state_t* g0_state, move_e move);
 void g1_execute_move(g1_state_t* g1_state, move_e move);
 
-#define G0_TABLE_SIZE  1138856
-#define G0_TABLE_DEPTH 6
+#define G0_NUM_ESLICE_COMBINATIONS  495 // (12*11*10*9)/(4!)
+#define G0_NUM_EO_COMBINATIONS     2048 // 2^11
+#define G0_NUM_CO_COMBINATIONS     2187 // 3^7
 
-typedef struct g0_table_t g0_table_t;
+#define G0_EO_AND_ESLICE_TABLE_SIZE (G0_NUM_EO_COMBINATIONS * G0_NUM_ESLICE_COMBINATIONS)
+#define G0_CO_AND_ESLICE_TABLE_SIZE (G0_NUM_CO_COMBINATIONS * G0_NUM_ESLICE_COMBINATIONS)
+
+typedef struct {
+    uint8_t eo_and_eslice_table[G0_EO_AND_ESLICE_TABLE_SIZE];
+    uint8_t co_and_eslice_table[G0_CO_AND_ESLICE_TABLE_SIZE];
+} g0_table_t;
 
 g0_table_t* g0_init_table(allocator_e allocator);
 
