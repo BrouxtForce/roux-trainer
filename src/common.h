@@ -106,6 +106,18 @@ static inline int popcount_u32(uint32_t value) {
     return __builtin_popcount(value);
 }
 
+static inline uint32_t random_u32() {
+    return arc4random();
+}
+
+static inline uint32_t random_uniform(uint32_t max_exclusive) {
+    return arc4random_uniform(max_exclusive);
+}
+
+static inline uint64_t random_u64() {
+    return ((uint64_t)random_u32() << 32) | (uint64_t)random_u32();
+}
+
 typedef enum {
     INVALID_ALLOCATOR,
 
@@ -124,8 +136,6 @@ void* resize_alloc(size_t old_size, void* data, size_t size, allocator_e allocat
 
 void free_alloc(void* ptr, allocator_e allocator);
 void temp_allocator_free_all();
-
-uint64_t random_u64();
 
 inline static int32_t max_i32(int32_t a, int32_t b) {
     return a > b ? a : b;

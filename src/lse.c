@@ -88,7 +88,7 @@ lse_state_t lse_move_m2(lse_state_t lse_state) {
 
 lse_state_t generate_random_lse_state() {
     lse_state_t lse_state;
-    lse_state.center_corner_state = rand() & LSE_STATE_CORNER_CENTER_STATE_MASK;
+    lse_state.center_corner_state = random_u32() & LSE_STATE_CORNER_CENTER_STATE_MASK;
 
     bool odd_center_state = (bool)(lse_state.center_corner_state & LSE_STATE_CENTER_STATE_INCREMENT);
     bool odd_corner_state = (bool)(lse_state.center_corner_state & LSE_STATE_CORNER_STATE_INCREMENT);
@@ -101,7 +101,7 @@ lse_state_t generate_random_lse_state() {
     for (int i = 0; i < 5; i++) {
         int swap_index;
         if (i < 4) {
-            swap_index = i + rand() % (6 - i);
+            swap_index = i + (int)random_uniform(6 - (uint32_t)i);
         } else {
             swap_index = is_even_parity ? 4 : 5;
         }
@@ -117,7 +117,7 @@ lse_state_t generate_random_lse_state() {
     lse_state.ul_ur_state = (uint8_t)((edge_indices[LSE_STATE_EDGE_INDEX_UL] << 4) | edge_indices[LSE_STATE_EDGE_INDEX_UR]);
     lse_state.df_db_state = (uint8_t)((edge_indices[LSE_STATE_EDGE_INDEX_DF] << 4) | edge_indices[LSE_STATE_EDGE_INDEX_DB]);
 
-    int edge_orientation = rand();
+    uint32_t edge_orientation = random_u32();
     lse_state.uf_ub_state ^= (edge_orientation << 0) & LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK;
     lse_state.ul_ur_state ^= (edge_orientation << 1) & LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK;
     lse_state.df_db_state ^= (edge_orientation << 2) & LSE_STATE_DOUBLE_EDGE_ORIENTATION_MASK;

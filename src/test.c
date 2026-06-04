@@ -289,8 +289,6 @@ void kociemba_test() {
 }
 
 void run_perf_tests() {
-    srand(42);
-
     const char* superflip = "U R2 F B R B2 R U2 L B2 R U' D' R2 F R' L B2 U2 F2";
 
     g0_state_t g0_state = G0_STATE_SOLVED;

@@ -202,8 +202,6 @@ void run_revenge() {
 }
 
 int main(int argc, char** argv) {
-    srand((unsigned)time(NULL));
-
     // TODO: Proper command line argument parsing
     if (argc >= 2 && strcmp(argv[1], "test") == 0) {
         run_tests();
