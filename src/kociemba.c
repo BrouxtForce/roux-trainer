@@ -492,26 +492,83 @@ static int g0_get_eslice_index(g0_state_t state) {
     return calc_eslice_index(edges);
 }
 
-static int g0_get_eo_and_eslice_index(g0_state_t state, int eslice_index) {
-    int eo_index     = g0_get_eo_index(state);
-    int index        = G0_NUM_ESLICE_COMBINATIONS * eo_index + eslice_index;
+// TODO: Should we enforce a max depth to not blow up the stack too much?
+void _recursive_g0_fill_move_table(g0_table_t* table, g0_state_t state) {
+    uint16_t base_eslice_index = (uint16_t)(G0_MOVES_PER_STATE * g0_get_eslice_index(state));
+    uint16_t base_eo_index     = (uint16_t)(G0_MOVES_PER_STATE * g0_get_eo_index(state));
+    uint16_t base_co_index     = (uint16_t)(G0_MOVES_PER_STATE * g0_get_co_index(state));
+
+    // NOTE: It's not actually guaranteed that any of the entries after the base entry
+    // are all initialized properly. This is because directly after the first entry of
+    // the base index is filled, another recursive function call of this function occurs.
+    // See the loop below. Because the base index is always guaranteed to be filled when
+    // we visit that state, we can actually get away with having the loop below set up the
+    // way that it is.
+    if (table->eslice_move_table[base_eslice_index] != 0xffff &&
+        table->eo_move_table    [base_eo_index]     != 0xffff &&
+        table->co_move_table    [base_co_index]     != 0xffff) {
+            return;
+    }
+
+    g0_state_t original_state = state;
+    for (int i = 0; i < 6; i++) {
+        move_e base_move = (move_e)(3 * i);
+
+        state = original_state;
+        for (int j = 0; j < 3; j++) {
+            switch (base_move) {
+                case MOVE_U: g0_move_u(&state); break;
+                case MOVE_D: g0_move_d(&state); break;
+                case MOVE_F: g0_move_f(&state); break;
+                case MOVE_B: g0_move_b(&state); break;
+                case MOVE_R: g0_move_r(&state); break;
+                case MOVE_L: g0_move_l(&state); break;
+                default:     assert(false);
+            }
+            move_e move = (move_e)(base_move + j);
+
+            table->eslice_move_table[base_eslice_index + move] = (uint16_t)g0_get_eslice_index(state);
+            table->eo_move_table    [base_eo_index     + move] = (uint16_t)g0_get_eo_index(state);
+            table->co_move_table    [base_co_index     + move] = (uint16_t)g0_get_co_index(state);
+
+            _recursive_g0_fill_move_table(table, state);
+        }
+    }
+}
+
+static g0_index_t g0_get_index(g0_state_t state) {
+    return (g0_index_t){
+        .eslice_index = (uint16_t)g0_get_eslice_index(state),
+        .eo_index     = (uint16_t)g0_get_eo_index(state),
+        .co_index     = (uint16_t)g0_get_co_index(state)
+    };
+}
+
+static int get_eo_and_eslice_index(g0_index_t g0_index) {
+    int index = G0_NUM_ESLICE_COMBINATIONS * g0_index.eo_index + g0_index.eslice_index;
 
     assert(index >= 0 && index < G0_EO_AND_ESLICE_TABLE_SIZE);
     return index;
 }
 
-static int g0_get_co_and_eslice_index(g0_state_t state, int eslice_index) {
-    int co_index     = g0_get_co_index(state);
-    int index        = G0_NUM_ESLICE_COMBINATIONS * co_index + eslice_index;
+static int get_co_and_eslice_index(g0_index_t g0_index) {
+    int index = G0_NUM_ESLICE_COMBINATIONS * g0_index.co_index + g0_index.eslice_index;
 
     assert(index >= 0 && index < G0_CO_AND_ESLICE_TABLE_SIZE);
     return index;
 }
 
-void _recursive_g0_fill_table(g0_table_t* g0_table, g0_state_t g0_state, move_e prev_base_move, int depth, int distance_from_solved) {
-    int eslice_index = g0_get_eslice_index(g0_state);
-    int eo_index = g0_get_eo_and_eslice_index(g0_state, eslice_index);
-    int co_index = g0_get_co_and_eslice_index(g0_state, eslice_index);
+static g0_index_t g0_index_move(const g0_table_t* g0_table, g0_index_t index, move_e move) {
+    index.eslice_index = g0_table->eslice_move_table[G0_MOVES_PER_STATE * index.eslice_index + move];
+    index.eo_index     = g0_table->eo_move_table    [G0_MOVES_PER_STATE * index.eo_index     + move];
+    index.co_index     = g0_table->co_move_table    [G0_MOVES_PER_STATE * index.co_index     + move];
+
+    return index;
+}
+
+static void _recursive_g0_fill_table(g0_table_t* g0_table, g0_index_t g0_index, move_e prev_base_move, int depth, int distance_from_solved) {
+    int eo_index = get_eo_and_eslice_index(g0_index);
+    int co_index = get_co_and_eslice_index(g0_index);
 
     bool eo_insert = false, co_insert = false;
     if (distance_from_solved < g0_table->eo_and_eslice_table[eo_index]) {
@@ -531,7 +588,6 @@ void _recursive_g0_fill_table(g0_table_t* g0_table, g0_state_t g0_state, move_e 
         return;
     }
 
-    g0_state_t original_state = g0_state;
     for (int i = 0; i < 6; i++) {
         move_e base_move = (move_e)(3 * i);
 
@@ -539,18 +595,10 @@ void _recursive_g0_fill_table(g0_table_t* g0_table, g0_state_t g0_state, move_e 
             continue;
         }
 
-        g0_state = original_state;
         for (int j = 0; j < 3; j++) {
-            switch (base_move) {
-                case MOVE_U: g0_move_u(&g0_state); break;
-                case MOVE_D: g0_move_d(&g0_state); break;
-                case MOVE_F: g0_move_f(&g0_state); break;
-                case MOVE_B: g0_move_b(&g0_state); break;
-                case MOVE_R: g0_move_r(&g0_state); break;
-                case MOVE_L: g0_move_l(&g0_state); break;
-                default:     assert(false);
-            }
-            _recursive_g0_fill_table(g0_table, g0_state, base_move, depth - 1, distance_from_solved + 1);
+            move_e move = (move_e)(base_move + j);
+            g0_index_t new_index = g0_index_move(g0_table, g0_index, move);
+            _recursive_g0_fill_table(g0_table, new_index, base_move, depth - 1, distance_from_solved + 1);
         }
     }
 }
@@ -562,9 +610,17 @@ g0_table_t* g0_init_table(allocator_e allocator) {
     static const int MAX_DISTANCE_FROM_SOLVED = 9;
 
     g0_table_t* g0_table = alloc(sizeof(g0_table_t), allocator, SOURCE_LOCATION);
-    memset(g0_table, MAX_DISTANCE_FROM_SOLVED, sizeof(*g0_table));
 
-    _recursive_g0_fill_table(g0_table, G0_STATE_SOLVED, MOVE_NULL, MAX_DISTANCE_FROM_SOLVED - 1, 0);
+    memset(g0_table->eslice_move_table, 0xff, sizeof(g0_table->eslice_move_table));
+    memset(g0_table->eo_move_table,     0xff, sizeof(g0_table->eo_move_table));
+    memset(g0_table->co_move_table,     0xff, sizeof(g0_table->co_move_table));
+
+    _recursive_g0_fill_move_table(g0_table, G0_STATE_SOLVED);
+
+    memset(g0_table->eo_and_eslice_table, MAX_DISTANCE_FROM_SOLVED, sizeof(g0_table->eo_and_eslice_table));
+    memset(g0_table->co_and_eslice_table, MAX_DISTANCE_FROM_SOLVED, sizeof(g0_table->co_and_eslice_table));
+
+    _recursive_g0_fill_table(g0_table, g0_get_index(G0_STATE_SOLVED), MOVE_NULL, MAX_DISTANCE_FROM_SOLVED - 1, 0);
 
     return g0_table;
 }
@@ -573,11 +629,10 @@ bool g0_is_solved(g0_state_t g0_state) {
     return memcmp(&g0_state, &G0_STATE_SOLVED, sizeof(g0_state_t)) == 0;
 }
 
-static void _search_g0_helper(const g0_table_t* g0_table, g0_state_t g0_state, move_list_t* move_list, solution_list_t* solution_list, int depth) {
-    int eslice_index = g0_get_eslice_index(g0_state);
+static void _search_g0_helper(const g0_table_t* g0_table, g0_index_t g0_index, move_list_t* move_list, solution_list_t* solution_list, int depth) {
     int distance_from_solved = max_i32(
-        g0_table->eo_and_eslice_table[g0_get_eo_and_eslice_index(g0_state, eslice_index)],
-        g0_table->co_and_eslice_table[g0_get_co_and_eslice_index(g0_state, eslice_index)]
+        g0_table->eo_and_eslice_table[get_eo_and_eslice_index(g0_index)],
+        g0_table->co_and_eslice_table[get_co_and_eslice_index(g0_index)]
     );
 
     if (depth < distance_from_solved) return;
@@ -589,8 +644,6 @@ static void _search_g0_helper(const g0_table_t* g0_table, g0_state_t g0_state, m
         return;
     }
 
-    g0_state_t original_state = g0_state;
-
     for (face_index_e face = 0; face < 6; face++) {
         move_e base_move = 3 * face;
 
@@ -598,29 +651,24 @@ static void _search_g0_helper(const g0_table_t* g0_table, g0_state_t g0_state, m
             continue;
         }
 
-        g0_state = original_state;
         for (int j = 0; j < 3; j++) {
-            array_append(*move_list, base_move + (move_e)j);
-            switch (base_move) {
-                case MOVE_U: g0_move_u(&g0_state); break;
-                case MOVE_D: g0_move_d(&g0_state); break;
-                case MOVE_F: g0_move_f(&g0_state); break;
-                case MOVE_B: g0_move_b(&g0_state); break;
-                case MOVE_R: g0_move_r(&g0_state); break;
-                case MOVE_L: g0_move_l(&g0_state); break;
-                default:     assert(false);
-            }
-            _search_g0_helper(g0_table, g0_state, move_list, solution_list, depth - 1);
+            move_e move = (move_e)(base_move + j);
+
+            array_append(*move_list, move);
+
+            g0_index_t new_index = g0_index_move(g0_table, g0_index, move);
+            _search_g0_helper(g0_table, new_index, move_list, solution_list, depth - 1);
+
             array_pop(*move_list);
         }
     }
 }
 
-static solution_list_t _solve_g0_at_depth(const g0_table_t* g0_table, g0_state_t g0_state, int depth, allocator_e allocator) {
+static solution_list_t _solve_g0_at_depth(const g0_table_t* g0_table, g0_index_t g0_index, int depth, allocator_e allocator) {
     solution_list_t solution_list = { .allocator = allocator };
     move_list_t move_list = { .allocator = TEMP_ALLOCATOR };
 
-    _search_g0_helper(g0_table, g0_state, &move_list, &solution_list, depth);
+    _search_g0_helper(g0_table, g0_index, &move_list, &solution_list, depth);
 
     return solution_list;
 }
@@ -633,7 +681,7 @@ solution_list_t solve_g0(const g0_table_t* g0_table, g0_state_t g0_state, alloca
     }
 
     for (int depth = 1; depth <= 12; depth++) {
-        solution_list_t solutions = _solve_g0_at_depth(g0_table, g0_state, depth, allocator);
+        solution_list_t solutions = _solve_g0_at_depth(g0_table, g0_get_index(g0_state), depth, allocator);
         if (solutions.size > 0) {
             return solutions;
         }

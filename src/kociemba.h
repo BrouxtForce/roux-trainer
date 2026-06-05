@@ -101,6 +101,8 @@ void g0_g1_state_write_visual_cube_state(visual_cube_state_t* visual_cube_state,
 void g0_execute_move(g0_state_t* g0_state, move_e move);
 void g1_execute_move(g1_state_t* g1_state, move_e move);
 
+#define G0_MOVES_PER_STATE 18
+
 #define G0_NUM_ESLICE_COMBINATIONS  495 // (12*11*10*9)/(4!)
 #define G0_NUM_EO_COMBINATIONS     2048 // 2^11
 #define G0_NUM_CO_COMBINATIONS     2187 // 3^7
@@ -109,6 +111,16 @@ void g1_execute_move(g1_state_t* g1_state, move_e move);
 #define G0_CO_AND_ESLICE_TABLE_SIZE (G0_NUM_CO_COMBINATIONS * G0_NUM_ESLICE_COMBINATIONS)
 
 typedef struct {
+    uint16_t eslice_index;
+    uint16_t eo_index;
+    uint16_t co_index;
+} g0_index_t;
+
+typedef struct {
+    uint16_t eslice_move_table[G0_NUM_ESLICE_COMBINATIONS * G0_MOVES_PER_STATE];
+    uint16_t eo_move_table[G0_NUM_EO_COMBINATIONS * G0_MOVES_PER_STATE];
+    uint16_t co_move_table[G0_NUM_CO_COMBINATIONS * G0_MOVES_PER_STATE];
+
     uint8_t eo_and_eslice_table[G0_EO_AND_ESLICE_TABLE_SIZE];
     uint8_t co_and_eslice_table[G0_CO_AND_ESLICE_TABLE_SIZE];
 } g0_table_t;

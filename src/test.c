@@ -233,8 +233,7 @@ void kociemba_test() {
     distribution_t movecount_distribution = { .allocator = MAIN_ALLOCATOR };
 
     uint32_t total_moves = 0;
-    timer_t timer;
-    timer_start(&timer);
+    double   total_time  = 0.0;
     for (int i = 0; i < num_scrambles; i++) {
         g0_state_t g0_state = G0_STATE_SOLVED;
         g1_state_t g1_state = G1_STATE_SOLVED;
@@ -251,6 +250,7 @@ void kociemba_test() {
         timer_stop(&solve_timer);
 
         distribution_add(&solve_time_distribution, (int)timer_duration_ms(solve_timer));
+        total_time += timer_duration_ms(solve_timer);
 
         printf("Solved %i scrambles\r", i + 1);
         fflush(stdout);
@@ -267,13 +267,12 @@ void kociemba_test() {
 
         temp_allocator_free_all();
     }
-    timer_stop(&timer);
 
-    double average_time      = timer_duration(timer) / num_scrambles;
+    double average_time      = total_time / num_scrambles;
     double average_movecount = (double)total_moves / num_scrambles;
 
-    printf("Average time per solve:  %fs\n", average_time);
-    printf("Average moves per solve: %fs\n", average_movecount);
+    printf("Average time per solve:  %fms\n", average_time);
+    printf("Average moves per solve: %f HTM\n", average_movecount);
 
     printf("\nMovecount Distribution (HTM):\n");
     distribution_print(&movecount_distribution, 50);
