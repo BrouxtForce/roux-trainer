@@ -643,20 +643,101 @@ solution_list_t solve_g0(const g0_table_t* g0_table, g0_state_t g0_state, alloca
     return (solution_list_t){};
 }
 
-static bool g1_state_equals(g1_state_t left, g1_state_t right) {
-    return memcmp(&left, &right, sizeof(g1_state_t)) == 0;
+static int get_permutation_index_packed_8(uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
+    int factorial[7] = {
+        /* 1! = */ 1,
+        /* 2! = */ 2,
+        /* 3! = */ 6,
+        /* 4! = */ 24,
+        /* 5! = */ 120,
+        /* 6! = */ 720,
+        /* 7! = */ 5040
+    };
+
+    int nums[8] = {
+        a >> 4, a & 0b1111,
+        b >> 4, b & 0b1111,
+        c >> 4, c & 0b1111,
+        d >> 4, d & 0b1111
+    };
+
+    for (int i = 0; i < 8; i++) {
+        assert(nums[i] >= 0 && nums[i] < 8);
+    }
+
+    int index = 0;
+    for (int i = 0; i < 7; i++) {
+        int num = nums[i];
+
+        index += num * factorial[6 - i];
+
+        for (int j = i + 1; j < 7; j++) {
+            if (nums[j] > num) {
+                nums[j]--;
+            }
+        }
+    }
+
+    return index;
 }
 
-#define HASH_TABLE_NAME g1_table
-#define STATE_TYPE g1_state_t
-#define STATE_EQUALS(a, b) g1_state_equals(a, b)
-#define STATE_TO_U64(state) (*(uint64_t*)&state)
-#define STATE_NULL G1_STATE_NULL
-#define HASH_TABLE_SIZE G1_TABLE_SIZE
-#include "hash_table.h"
+static int get_edge_permutation_index(g1_state_t state, int eslice_index) {
+    int index = get_permutation_index_packed_8(state.uf_ub_edges, state.ul_ur_edges, state.df_db_edges, state.dl_dr_edges);
+
+    index = index * G1_NUM_ESLICE_PERMUTATIONS + eslice_index;
+
+    assert(index >= 0 && index < G1_EDGE_AND_ESLICE_TABLE_SIZE);
+    return index;
+}
+
+static int get_corner_permutation_index(g1_state_t state, int eslice_index) {
+    int index = get_permutation_index_packed_8(state.ufr_ubl_corners, state.ufl_ubr_corners, state.dfr_dbl_corners, state.dfl_dbr_corners);
+
+    index = index * G1_NUM_ESLICE_PERMUTATIONS + eslice_index;
+
+    assert(index >= 0 && index < G1_CORNER_AND_ESLICE_TABLE_SIZE);
+    return index;
+}
+
+static int get_eslice_permutation_index(g1_state_t state) {
+    int fl = (state.fl_fr_edges >> 4    ) - G1_EDGE_INDEX_FL;
+    int fr = (state.fl_fr_edges & 0b1111) - G1_EDGE_INDEX_FL;
+    int bl = (state.bl_br_edges >> 4    ) - G1_EDGE_INDEX_FL;
+    [[maybe_unused]]
+    int br = (state.bl_br_edges & 0b1111) - G1_EDGE_INDEX_FL;
+
+    assert(fl >= 0 && fl < 4 && fr >= 0 && fr < 4 &&
+           bl >= 0 && bl < 4 && br >= 0 && br < 4);
+    assert(fl != fr && fl != bl && fl != br && fr != bl && fr != br && bl != br);
+
+    if (fr > fl) fr--;
+    if (bl > fl) bl--;
+
+    if (bl > fr) bl--;
+
+    int index = 6*fl + 2*fr + bl;
+
+    assert(index >= 0 && index < 24);
+    return index;
+}
 
 void _recursive_g1_fill_table(g1_table_t* g1_table, g1_state_t g1_state, move_e prev_base_move, int depth, int distance_from_solved) {
-    if (!g1_table_insert(g1_table, g1_state, distance_from_solved)) {
+    int eslice_index = get_eslice_permutation_index(g1_state);
+
+    int edge_index   = get_edge_permutation_index(g1_state, eslice_index);
+    int corner_index = get_corner_permutation_index(g1_state, eslice_index);
+
+    bool did_insert = false;
+    if (distance_from_solved < g1_table->edge_and_eslice_table[edge_index]) {
+        g1_table->edge_and_eslice_table[edge_index] = (uint8_t)distance_from_solved;
+        did_insert = true;
+    }
+    if (distance_from_solved < g1_table->corner_and_eslice_table[corner_index]) {
+        g1_table->corner_and_eslice_table[corner_index] = (uint8_t)distance_from_solved;
+        did_insert = true;
+    }
+
+    if (!did_insert) {
         return;
     }
 
@@ -700,13 +781,15 @@ void _recursive_g1_fill_table(g1_table_t* g1_table, g1_state_t g1_state, move_e 
 }
 
 g1_table_t* g1_init_table(allocator_e allocator) {
+    // From my testing, I've found that the maximum distance from solved for the edge_and_eslice states is 12,
+    // whereas for the corner_and_eslice states it's 7. Of course, this is assuming that there weren't any bugs
+    // in my implementation. Regardless, we can search to depth 11 and have the default value in the tables be 12.
+    static const int MAX_DISTANCE_FROM_SOLVED = 12;
+
     g1_table_t* g1_table = alloc(sizeof(g1_table_t), allocator, SOURCE_LOCATION);
-    memset(g1_table, 0, sizeof(*g1_table));
+    memset(g1_table, MAX_DISTANCE_FROM_SOLVED, sizeof(*g1_table));
 
-    g1_table->magic = random_u64();
-    _recursive_g1_fill_table(g1_table, G1_STATE_SOLVED, MOVE_NULL, G1_TABLE_DEPTH, 0);
-
-    assert(g1_table->count == G1_TABLE_SIZE);
+    _recursive_g1_fill_table(g1_table, G1_STATE_SOLVED, MOVE_NULL, MAX_DISTANCE_FROM_SOLVED - 1, 0);
 
     return g1_table;
 }
@@ -716,22 +799,23 @@ bool g1_is_solved(g1_state_t g1_state) {
 }
 
 static void _search_g1_helper(g1_table_t* g1_table, g1_state_t g1_state, move_list_t* move_list, solution_list_t* solution_list, int depth) {
-    if (g1_is_solved(g1_state)) {
+    int eslice_index = get_eslice_permutation_index(g1_state);
+    int edge_index   = get_edge_permutation_index(g1_state, eslice_index);
+    int corner_index = get_corner_permutation_index(g1_state, eslice_index);
+
+    int distance_from_solved = max_i32(
+        g1_table->edge_and_eslice_table[edge_index],
+        g1_table->corner_and_eslice_table[corner_index]
+    );
+
+    if (depth < distance_from_solved) return;
+
+    if (distance_from_solved == 0) {
         move_list_t copy_move_list = { .allocator = solution_list->allocator };
         array_copy(*move_list, copy_move_list);
         array_append(*solution_list, copy_move_list);
         return;
     }
-
-    if (depth <= 0) return;
-
-    int distance_from_solved = g1_table_lookup(g1_table, g1_state);
-    if (distance_from_solved == -1) {
-        // Best case scenario
-        distance_from_solved = G1_TABLE_DEPTH + 1;
-    }
-
-    if (depth < distance_from_solved) return;
 
     g1_state_t original_state = g1_state;
 

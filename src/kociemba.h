@@ -119,10 +119,17 @@ bool g0_is_solved(g0_state_t g0_state);
 
 solution_list_t solve_g0(const g0_table_t* g0_table, g0_state_t g0_state, allocator_e allocator);
 
-#define G1_TABLE_SIZE  5068603
-#define G1_TABLE_DEPTH 8
+#define G1_NUM_EDGE_PERMUTATIONS   40320 // 8!
+#define G1_NUM_CORNER_PERMUTATIONS 40320 // 8!
+#define G1_NUM_ESLICE_PERMUTATIONS    24 // 4!
 
-typedef struct g1_table_t g1_table_t;
+#define G1_EDGE_AND_ESLICE_TABLE_SIZE   (G1_NUM_EDGE_PERMUTATIONS   * G1_NUM_ESLICE_PERMUTATIONS)
+#define G1_CORNER_AND_ESLICE_TABLE_SIZE (G1_NUM_CORNER_PERMUTATIONS * G1_NUM_ESLICE_PERMUTATIONS)
+
+typedef struct {
+    uint8_t edge_and_eslice_table  [G1_EDGE_AND_ESLICE_TABLE_SIZE];
+    uint8_t corner_and_eslice_table[G1_CORNER_AND_ESLICE_TABLE_SIZE];
+} g1_table_t;
 
 g1_table_t* g1_init_table(allocator_e allocator);
 
